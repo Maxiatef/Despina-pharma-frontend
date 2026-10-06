@@ -1,0 +1,3 @@
+(()=>{const section=document.querySelector('.service-journey');if(!section)return;const scenes=[...section.querySelectorAll('.journey-scene')],buttons=scenes.map(s=>s.querySelector('.scene-toggle')),contents=scenes.map(s=>s.querySelector('.scene-services'));
+function select(index){scenes.forEach((scene,i)=>{scene.classList.toggle('is-active',i===index);buttons[i].setAttribute('aria-expanded',String(i===index));contents[i].hidden=i!==index})}
+buttons.forEach((button,i)=>button.addEventListener('click',()=>select(button.getAttribute('aria-expanded')==='true'?-1:i)));select(0);section.classList.add('journey-enhanced');})();
