@@ -8,10 +8,9 @@ import type { NextRequest } from 'next/server';
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
   if (pathname.endsWith('/')) return NextResponse.next();
-  const url = request.nextUrl.clone();
-  url.pathname = `${pathname}/`;
-  url.search = search;
-  return NextResponse.redirect(url, 308);
+  // Build a plain URL: a cloned nextUrl is re-formatted by Next.js on Vercel and loses the
+  // added slash, so the redirect pointed to itself (ERR_TOO_MANY_REDIRECTS on /admin, /login…).
+  return NextResponse.redirect(new URL(`${pathname}/${search}`, request.url), 308);
 }
 
 export const config = {
