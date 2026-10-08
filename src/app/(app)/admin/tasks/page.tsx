@@ -5,17 +5,18 @@ import Link from 'next/link';
 import { del, post, qs } from '@/lib/api';
 import type { Paged, Task } from '@/lib/types';
 import { Badge, Empty, ErrorBox, Loading, PageHead, Pager, fmtDate, useAction, useApi } from '@/components/app/ui';
+import { TaskAssignee } from '@/components/app/panels';
 import { useQueryState } from '@/components/app/useQueryState';
 
 function Tasks() {
   const { values, set } = useQueryState();
   const state = values.state ?? 'open';
-  const assignee = values.assignee ?? 'me';
+  // Everyone by default: new website inquiries create unassigned follow-up tasks.
+  const assignee = values.assignee ?? 'all';
   const page = Number(values.page ?? 1);
   const tasks = useApi<Paged<Task>>(`/tasks${qs({ state, assignee: assignee === 'all' ? undefined : assignee, q: values.q, page, pageSize: 50 })}`);
   const staff = useApi<{ id: string; email: string }[]>('/users/staff');
   const { busy, run } = useAction();
-  const emailOf = (id: string | null) => staff.data?.find((u) => u.id === id)?.email ?? '—';
 
   return (
     <>
@@ -30,10 +31,14 @@ function Tasks() {
             ))}
           </div>
           <select className="input" value={assignee} onChange={(e) => set({ assignee: e.target.value })} aria-label="Assignee">
-            <option value="me">My tasks</option>
             <option value="all">Everyone</option>
+            <option value="me">My tasks</option>
+            <option value="unassigned">Unassigned</option>
             {staff.data?.map((u) => <option key={u.id} value={u.id}>{u.email}</option>)}
           </select>
+          <form className="row" onSubmit={(e) => { e.preventDefault(); set({ q: String(new FormData(e.currentTarget).get('q') ?? '') || undefined }); }}>
+            <input className="input" name="q" defaultValue={values.q ?? ''} placeholder="Search tasks…" aria-label="Search tasks" />
+          </form>
         </div>
         <ErrorBox error={tasks.error} onRetry={tasks.reload} />
         {tasks.loading && !tasks.data ? <Loading /> : tasks.data && (
@@ -49,10 +54,14 @@ function Tasks() {
                         onChange={async () => { if (await run(() => post(`/tasks/${t.id}/${t.completedAt ? 'reopen' : 'complete'}`))) tasks.reload(); }} /></td>
                       <td style={{ textDecoration: t.completedAt ? 'line-through' : undefined }}>{t.title}</td>
                       <td className="small">
-                        {t.inquiryId && <Link href={`/admin/inquiries/${t.inquiryId}/`}>Lead</Link>}
-                        {t.projectId && <Link href={`/admin/projects/${t.projectId}/`}>Project</Link>}
+                        {t.inquiryId && <Link href={`/admin/inquiries/${t.inquiryId}/`} className="mono">{t.inquiryRef ?? 'Lead'}</Link>}
+                        {t.projectId && <Link href={`/admin/projects/${t.projectId}/`} className="mono">{t.projectCode ?? 'Project'}</Link>}
+                        <div className="muted">{[t.contactName, t.companyName].filter(Boolean).join(' · ')}</div>
                       </td>
-                      <td className="small">{emailOf(t.assigneeId)}</td>
+                      <td className="small">
+                        <TaskAssignee task={t} staff={staff.data} onChanged={tasks.reload} disabled={!!t.completedAt} />
+                        {!t.assigneeId && !t.completedAt && <div style={{ marginTop: 4 }}><Badge value="unassigned" tone="warn" /></div>}
+                      </td>
                       <td><Badge value={t.priority} /></td>
                       <td className="small">{overdue ? <span className="badge bad">{fmtDate(t.dueAt, true)}</span> : fmtDate(t.dueAt, true)}</td>
                       <td><button className="btn small ghost" disabled={busy} onClick={async () => { if (confirm('Delete this task?') && await run(() => del(`/tasks/${t.id}`), 'Task deleted')) tasks.reload(); }}>Delete</button></td>

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { del, patch, post, qs } from '@/lib/api';
 import { PROJECT_STATUSES, SAMPLE_STATUSES } from '@/lib/types';
 import type {
-  Approval, Brief, CatalogItem, Paged, ProjectDetail, ProjectProduct, QuoteDetail, SampleDetail, StatusEventLike,
+  Approval, Brief, CatalogItem, Paged, ProjectDetail, ProjectProduct, QuoteDetail, SampleDetail, StageTemplate, StatusEventLike,
 } from './workspace-types';
 import { isStaff, useAuth } from './auth';
 import { DocumentsPanel, MessagesPanel, TasksPanel } from './panels';
@@ -42,6 +42,61 @@ function Stages({ project, reload, staff }: { project: ProjectDetail; reload: ()
         </div>
       )}
       {gated && <p className="small muted" style={{ marginTop: 6 }}>This is a quality gate: only {current?.requiresRole} staff (or an admin) can complete it.</p>}
+    </div>
+  );
+}
+
+// ===================================================================== stages per product line
+function ProductStages({ product, projectId, staff, reload }: { product: ProjectProduct; projectId: string; staff: boolean; reload: () => void }) {
+  const { me } = useAuth();
+  const { busy, run } = useAction();
+  const templates = useApi<StageTemplate[]>(staff ? '/stage-templates' : null);
+  const [templateId, setTemplateId] = useState('');
+  const stages = product.stages ?? [];
+  const current = stages.find((s) => s.id === product.currentStageId);
+  const gated = current?.requiresRole && me?.role !== current.requiresRole && me?.role !== 'admin';
+  const started = stages.some((s) => s.completedAt);
+  const allDone = stages.length > 0 && stages.every((s) => s.completedAt);
+  const setTemplate = async () => {
+    if (await run(() => post(`/project-products/${product.id}/stages`, { stageTemplateId: templateId || undefined }), 'Stages set for this product')) reload();
+  };
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div className="row between">
+        <span className="eyebrow">Stages for this product</span>
+        {product.stageSummary && (
+          <span className="small muted">
+            {allDone ? 'All stages completed' : <>Current: <b style={{ fontWeight: 500 }}>{current?.name}</b></>} · {product.stageSummary.done} of {product.stageSummary.total} done
+          </span>
+        )}
+      </div>
+      {stages.length > 0 ? (
+        <div className="stages" style={{ marginTop: 8 }}>
+          {stages.map((s) => (
+            <span key={s.id} className={`stage ${s.completedAt ? 'done' : s.id === product.currentStageId ? 'current' : ''}`} title={s.requiresRole ? `Requires ${s.requiresRole}` : undefined}>
+              {s.completedAt ? '✓ ' : ''}{s.name}{s.requiresRole ? ' 🔒' : ''}
+            </span>
+          ))}
+        </div>
+      ) : <p className="small muted" style={{ marginTop: 6 }}>No stages yet for this product.</p>}
+      {staff && current && (
+        <div className="row" style={{ marginTop: 8 }}>
+          <button className="btn small" disabled={busy || !!gated} title={gated ? `Only ${current.requiresRole} staff can complete this stage` : undefined}
+            onClick={async () => { if (await run(() => post(`/projects/${projectId}/stages/${current.id}/complete`, {}), `“${current.name}” completed for ${product.name}`)) reload(); }}>
+            Complete “{current.name}”
+          </button>
+          {gated && <span className="small muted">Quality gate: only {current.requiresRole} staff or an admin.</span>}
+        </div>
+      )}
+      {staff && !started && (
+        <div className="row" style={{ marginTop: 8 }}>
+          <select className="input" value={templateId} onChange={(e) => setTemplateId(e.target.value)} aria-label={`Stage template for ${product.name}`}>
+            <option value="">Project / default template</option>
+            {templates.data?.map((t) => <option key={t.id} value={t.id}>{t.name}{t.isDefault ? ' (default)' : ''}</option>)}
+          </select>
+          <button className="btn small secondary" disabled={busy} onClick={setTemplate}>{stages.length ? 'Use these stages' : 'Start stages'}</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -234,6 +289,7 @@ function Products({ project, staff, reload }: { project: ProjectDetail; staff: b
               }}>Remove</button>
             </div>
             <hr />
+            <ProductStages product={p} projectId={project.id} staff={staff} reload={reload} />
             <Briefs product={p} projectId={project.id} />
             <div style={{ marginTop: 12 }}>
               <span className="eyebrow">Samples</span>
@@ -302,6 +358,8 @@ function QuoteView({ quoteId, projectId, staff, onChanged }: { quoteId: string; 
   const { busy, run } = useAction();
   const [revising, setRevising] = useState(false);
   const [confirm, setConfirm] = useState('');
+  const [answer, setAnswer] = useState<'declined' | 'changes_requested' | null>(null);
+  const [answerNote, setAnswerNote] = useState('');
   if (!q.data) return q.loading ? <Loading /> : <ErrorBox error={q.error} />;
   const latest = q.data.versions[0];
   const reload = () => { q.reload(); onChanged(); };
@@ -313,7 +371,7 @@ function QuoteView({ quoteId, projectId, staff, onChanged }: { quoteId: string; 
           <div className="row">
             {q.data.status === 'draft' && <button className="btn small accent" disabled={busy} onClick={async () => { if (await run(() => post(`/quotes/${quoteId}/send`), 'Quote sent to the customer')) reload(); }}>Send to customer</button>}
             {q.data.status !== 'accepted' && <button className="btn small secondary" onClick={() => setRevising((r) => !r)}>{revising ? 'Cancel' : 'Revise'}</button>}
-            {['sent', 'draft'].includes(q.data.status) && (
+            {['sent', 'draft', 'changes_requested'].includes(q.data.status) && (
               <select className="input" value="" onChange={async (e) => { if (e.target.value && await run(() => patch(`/quotes/${quoteId}`, { status: e.target.value }), 'Quote updated')) reload(); }}>
                 <option value="">Mark as…</option><option value="rejected">Rejected</option><option value="expired">Expired</option>
               </select>
@@ -331,6 +389,14 @@ function QuoteView({ quoteId, projectId, staff, onChanged }: { quoteId: string; 
             </tbody>
           </table>
           {latest.approvals.map((a) => <p key={a.id} className="small" style={{ marginTop: 8 }}><Badge value="accepted" /> {fmtDate(a.approvedAt, true)} — “{a.confirmationText}”</p>)}
+          {q.data.versions.flatMap((v) => (v.responses ?? []).map((r) => (
+            <p key={r.id} className="small" style={{ marginTop: 8 }}>
+              <Badge value={r.decision} /> v{v.versionNo} · {fmtDate(r.createdAt, true)}{r.note && <> — “{r.note}”</>}
+            </p>
+          )))}
+          {staff && q.data.status === 'changes_requested' && (
+            <p className="small" style={{ marginTop: 8 }}>The customer asked for changes. Use <b style={{ fontWeight: 500 }}>Revise</b> to make a new version, then send it again.</p>
+          )}
           {!staff && q.data.status === 'sent' && (
             <form className="row" style={{ marginTop: 12 }} onSubmit={async (e) => {
               e.preventDefault();
@@ -339,6 +405,37 @@ function QuoteView({ quoteId, projectId, staff, onChanged }: { quoteId: string; 
               <input className="input" style={{ flex: 1 }} required minLength={5} placeholder={`Type: I accept quote ${q.data.quoteNo} version ${latest.versionNo}`} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
               <button className="btn accent" disabled={busy}>Accept quote</button>
             </form>
+          )}
+          {!staff && q.data.status === 'sent' && (
+            <div style={{ marginTop: 10 }}>
+              {!answer ? (
+                <div className="row">
+                  <span className="small muted">Not ready to accept?</span>
+                  <button className="btn small secondary" onClick={() => setAnswer('changes_requested')}>Request changes</button>
+                  <button className="btn small ghost" onClick={() => setAnswer('declined')}>Decline quote</button>
+                </div>
+              ) : (
+                <form className="stack" onSubmit={async (e) => {
+                  e.preventDefault();
+                  const ok = await run(
+                    () => post(`/quotes/${quoteId}/respond`, { decision: answer, quoteVersionId: latest.id, note: answerNote.trim() || undefined }),
+                    answer === 'declined' ? 'Quote declined. Your Despina contact has been told.' : 'Change request sent to your Despina contact.',
+                  );
+                  if (ok) { setAnswer(null); setAnswerNote(''); reload(); }
+                }}>
+                  <label className="field">
+                    <span>{answer === 'declined' ? 'Reason for declining (optional)' : 'What should change? *'}</span>
+                    <textarea rows={3} maxLength={5000} required={answer === 'changes_requested'} minLength={answer === 'changes_requested' ? 5 : undefined}
+                      value={answerNote} onChange={(e) => setAnswerNote(e.target.value)}
+                      placeholder={answer === 'declined' ? 'e.g. budget, timing, chose another option' : 'e.g. quantity 2,000 instead of 1,000; price per unit; different packaging'} />
+                  </label>
+                  <div className="row">
+                    <button className={`btn small ${answer === 'declined' ? '' : 'accent'}`} disabled={busy}>{answer === 'declined' ? `Decline quote ${q.data.quoteNo}` : 'Send change request'}</button>
+                    <button type="button" className="btn small ghost" onClick={() => { setAnswer(null); setAnswerNote(''); }}>Cancel</button>
+                  </div>
+                </form>
+              )}
+            </div>
           )}
           {q.data.versions.length > 1 && <p className="small muted" style={{ marginTop: 8 }}>{q.data.versions.length - 1} earlier version(s) kept for the record.</p>}
         </>
@@ -411,6 +508,11 @@ export function ProjectWorkspace({ id, backHref }: { id: string; backHref: strin
   if (p.loading && !p.data) return <Loading />;
   if (!p.data) return <ErrorBox error={p.error ?? 'Not found'} onRetry={p.reload} />;
   const project = p.data;
+  // Re-load the history whenever a stage or quote changes (it is fetched separately).
+  const historyKey = [
+    project.updatedAt, project.currentStageId, ...project.products.map((x) => `${x.id}:${x.currentStageId}:${x.stageSummary?.done}`),
+    ...project.quotes.map((q) => `${q.id}:${q.status}`),
+  ].join('|');
 
   return (
     <>
@@ -423,6 +525,7 @@ export function ProjectWorkspace({ id, backHref }: { id: string; backHref: strin
           </select>
         ) : <Badge value={project.status} />}
         {staff && project.sourceInquiryId && <Link className="btn secondary" href={`/admin/inquiries/${project.sourceInquiryId}/`}>Original inquiry</Link>}
+        {me?.role === 'admin' && <Link className="btn secondary" href={`/admin/audit/?projectId=${project.id}`}>Audit history</Link>}
       </PageHead>
 
       <Stages project={project} reload={p.reload} staff={staff} />
@@ -448,7 +551,7 @@ export function ProjectWorkspace({ id, backHref }: { id: string; backHref: strin
           )}
           <Approvals projectId={id} />
           {staff && <TasksPanel projectId={id} />}
-          <ProjectTimeline projectId={id} />
+          <ProjectTimeline key={historyKey} projectId={id} />
         </div>
       </div>
     </>

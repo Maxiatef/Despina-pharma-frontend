@@ -7,7 +7,10 @@ import { join, resolve } from 'node:path';
 
 const ROOT = resolve(import.meta.dirname, '..');
 const BASE = (process.env.SITE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-const manifest = JSON.parse(await readFile(join(ROOT, 'src/content/manifest.json'), 'utf8'));
+const manifest = {
+  ...JSON.parse(await readFile(join(ROOT, 'src/content/manifest.json'), 'utf8')),
+  ...JSON.parse(await readFile(join(ROOT, 'src/content/extra-pages.json'), 'utf8')),
+};
 const routes = Object.keys(manifest).filter((r) => r !== '/404');
 
 const problems = [];

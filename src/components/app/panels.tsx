@@ -146,6 +146,25 @@ export function MessagesPanel({ path, title = 'Messages', hint }: { path: string
 }
 
 // ===================================================================== tasks
+/** Who owns a task: pick a staff member, or "Unassigned". Saves immediately. */
+export function TaskAssignee({ task, staff, onChanged, disabled }: {
+  task: Task; staff: { id: string; email: string }[] | undefined; onChanged: () => void; disabled?: boolean;
+}) {
+  const { busy, run } = useAction();
+  return (
+    <select className="input" style={{ minWidth: 0, maxWidth: 220, padding: '4px 8px', fontSize: '.84rem' }} aria-label={`Assigned to – ${task.title}`}
+      value={task.assigneeId ?? ''} disabled={busy || disabled}
+      onChange={async (e) => {
+        const userId = e.target.value || null;
+        const who = staff?.find((u) => u.id === userId)?.email;
+        if (await run(() => post(`/tasks/${task.id}/assign`, { userId }), who ? `Task assigned to ${who}` : 'Task unassigned')) onChanged();
+      }}>
+      <option value="">Unassigned</option>
+      {staff?.map((u) => <option key={u.id} value={u.id}>{u.email}</option>)}
+    </select>
+  );
+}
+
 export function TasksPanel({ inquiryId, projectId }: { inquiryId?: string; projectId?: string }) {
   const tasks = useApi<{ items: Task[] }>(`/tasks${qs({ inquiryId, projectId, state: 'all', pageSize: 100 })}`);
   const staff = useApi<{ id: string; email: string }[]>('/users/staff');
@@ -166,7 +185,6 @@ export function TasksPanel({ inquiryId, projectId }: { inquiryId?: string; proje
       tasks.reload();
     }
   }
-  const emailOf = (id: string | null) => staff.data?.find((u) => u.id === id)?.email ?? '—';
 
   return (
     <div className="card">
@@ -179,8 +197,9 @@ export function TasksPanel({ inquiryId, projectId }: { inquiryId?: string; proje
               <label className="check" style={{ textDecoration: t.completedAt ? 'line-through' : undefined, flex: 1 }}>
                 <input type="checkbox" checked={!!t.completedAt} disabled={busy}
                   onChange={async () => { if (await run(() => post(`/tasks/${t.id}/${t.completedAt ? 'reopen' : 'complete'}`))) tasks.reload(); }} />
-                <span>{t.title}<div className="small muted">{emailOf(t.assigneeId)}{t.dueAt ? ` · due ${fmtDate(t.dueAt, true)}` : ''}</div></span>
+                <span>{t.title}<div className="small muted">{t.dueAt ? `due ${fmtDate(t.dueAt, true)}` : 'no due date'}</div></span>
               </label>
+              <TaskAssignee task={t} staff={staff.data} onChanged={tasks.reload} />
               <div className="row">{overdue && <Badge value="overdue" tone="bad" />}<Badge value={t.priority} /></div>
             </div>
           );

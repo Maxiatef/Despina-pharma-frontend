@@ -1,5 +1,5 @@
 export type {
-  Approval, Brief, CatalogItem, Doc, Paged, ProjectDetail, ProjectProduct, QuoteDetail, SampleDetail,
+  Approval, Brief, CatalogItem, Doc, Paged, ProjectDetail, ProjectProduct, QuoteDetail, SampleDetail, StageTemplate,
 } from '@/lib/types';
 
 /** Row of GET /projects/:id/timeline (status_events). */

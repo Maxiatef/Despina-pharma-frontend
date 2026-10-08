@@ -6,7 +6,8 @@ import { useAuth } from '@/components/app/auth';
 
 interface Overview {
   leads: { new: number; last_7_days: number; last_30_days: number; won: number; lost: number; unassigned: number };
-  myWork: { open_tasks: number; overdue_tasks: number; my_open_leads: number };
+  myWork: { open_tasks: number; overdue_tasks: number; my_open_leads: number; all_open_tasks: number; all_overdue_tasks: number; unassigned_tasks: number };
+  openTasks: { id: string; title: string; priority: string; due_at: string | null; inquiry_id: string | null; project_id: string | null; assignee_email: string | null; reference_no: string | null; project_code: string | null }[];
   projectsByStatus: Record<string, number>;
   emailsLast30Days: Record<string, number>;
   leadsByFormLast30Days: { form_type: string; count: number }[];
@@ -47,6 +48,12 @@ export default function DashboardPage() {
             <Stat label="Won" value={o.data.leads.won} href="/admin/inquiries/?status=won" />
             <Stat label="Active projects" value={o.data.projectsByStatus.active ?? 0} href="/admin/projects/?status=active" />
           </div>
+          <div className="grid cols-4" style={{ marginTop: 16 }}>
+            <Stat label="Open follow-up tasks" value={o.data.myWork.all_open_tasks} href="/admin/tasks/?assignee=all" />
+            <Stat label="Overdue tasks (everyone)" value={o.data.myWork.all_overdue_tasks} href="/admin/tasks/?state=overdue&assignee=all" />
+            <Stat label="Unassigned tasks" value={o.data.myWork.unassigned_tasks} href="/admin/tasks/?assignee=unassigned" />
+            <Stat label="My open tasks" value={o.data.myWork.open_tasks} href="/admin/tasks/?assignee=me" />
+          </div>
 
           <div className="split" style={{ marginTop: 20 }}>
             <div className="card">
@@ -70,6 +77,26 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="stack">
+              <div className="card pad">
+                <div className="row between"><h3>Follow-ups to do</h3><Link href="/admin/tasks/" className="small">All tasks</Link></div>
+                <p className="small muted" style={{ marginTop: 4 }}>Yours and unassigned, soonest first.</p>
+                <div style={{ marginTop: 8 }}>
+                  {o.data.openTasks.map((t) => {
+                    const overdue = t.due_at && new Date(t.due_at) < new Date();
+                    const href = t.inquiry_id ? `/admin/inquiries/${t.inquiry_id}/` : t.project_id ? `/admin/projects/${t.project_id}/` : '/admin/tasks/';
+                    return (
+                      <div key={t.id} className="small" style={{ padding: '6px 0', borderBottom: '1px solid var(--line-2)' }}>
+                        <Link href={href}>{t.title}</Link>
+                        <div className="row between muted">
+                          <span>{t.assignee_email ?? 'Unassigned'}</span>
+                          {t.due_at && <span className={overdue ? 'badge bad' : ''}>due {fmtDate(t.due_at, true)}</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {!o.data.openTasks.length && <p className="muted small">Nothing to follow up.</p>}
+                </div>
+              </div>
               <div className="card pad">
                 <h3>Leads per week</h3>
                 <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 120, marginTop: 14 }} aria-label="Leads per week, last 12 weeks">

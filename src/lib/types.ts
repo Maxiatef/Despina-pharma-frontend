@@ -8,11 +8,16 @@ export const INQUIRY_STATUSES: InquiryStatus[] = ['new', 'assigned', 'awaiting_c
 export type FormType = 'contact' | 'new_customer' | 'new_product' | 'sample_request' | 'sample_feedback' | 'service';
 export const FORM_TYPES: FormType[] = ['contact', 'new_customer', 'new_product', 'sample_request', 'sample_feedback', 'service'];
 export const PROJECT_STATUSES = ['active', 'on_hold', 'completed', 'cancelled'] as const;
+/** Contact-form topics (inquiries.inquiry_type). */
+export const INQUIRY_TYPES: Record<string, string> = {
+  general: 'General question', new_product: 'New product development', private_label: 'Private label / stock formula',
+  sample_request: 'Sample request', quotation: 'Quotation / pricing', packaging_filling: 'Packaging & filling',
+  existing_project: 'Existing project', partnership: 'Partnership / supplier', other: 'Other',
+};
 export const SAMPLE_STATUSES = ['requested', 'in_development', 'shipped', 'feedback_received', 'approved', 'rejected'] as const;
-export const QUOTE_STATUSES = ['draft', 'sent', 'accepted', 'rejected', 'expired'] as const;
+export const QUOTE_STATUSES = ['draft', 'sent', 'accepted', 'rejected', 'expired', 'changes_requested'] as const;
 export const TASK_PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
 export const CATALOG_KINDS = ['stock-reference', 'concept', 'base', 'development-program', 'despina-formula', 'assortment', 'product-type', 'format-option', 'program-service'] as const;
-export const AUDIT_ENTITIES = ['company', 'contact', 'user', 'inquiry', 'project', 'document', 'sample', 'quote', 'approval', 'catalog_item', 'service', 'faq', 'settings'] as const;
 export const EMAIL_JOB_STATUSES = ['queued', 'sending', 'sent', 'failed'] as const;
 
 export interface Me {
@@ -45,7 +50,7 @@ export interface Contact extends Base {
 export interface User extends Base { email: string; role: UserRole; isActive: boolean; mfaEnabled: boolean; lastLoginAt: string | null; contactId: string | null }
 
 export interface InquiryRow extends Base {
-  referenceNo: string; formType: FormType; status: InquiryStatus; contactId: string; companyId: string | null;
+  referenceNo: string; formType: FormType; inquiryType: string | null; status: InquiryStatus; contactId: string; companyId: string | null;
   message: string | null; payload: { form?: string; fields?: Record<string, string | string[]>; labels?: Record<string, string> } & Record<string, unknown>;
   sourcePage: string | null;
   contact: { firstName: string; lastName: string | null; email: string };
@@ -62,6 +67,9 @@ export interface TimelineEntry {
 export interface Task extends Base {
   inquiryId: string | null; projectId: string | null; assigneeId: string | null; createdBy: string | null; title: string;
   priority: (typeof TASK_PRIORITIES)[number]; dueAt: string | null; completedAt: string | null;
+  // Joined by GET /tasks
+  inquiryRef?: string | null; inquiryStatus?: string | null; projectCode?: string | null; projectName?: string | null;
+  companyName?: string | null; contactName?: string | null;
 }
 
 export interface DocumentVersion extends Base {
@@ -89,11 +97,14 @@ export interface InquiryDetail extends Omit<InquiryRow, 'contact' | 'companyName
 }
 
 export interface ProjectStage extends Base {
-  projectId: string; name: string; sortOrder: number; requiresRole: UserRole | null; startedAt: string | null; completedAt: string | null; completedBy: string | null;
+  projectId: string; projectProductId: string | null; name: string; sortOrder: number; requiresRole: UserRole | null;
+  startedAt: string | null; completedAt: string | null; completedBy: string | null;
 }
 export interface Sample extends Base { projectProductId: string; inquiryId: string | null; title: string; status: (typeof SAMPLE_STATUSES)[number] }
 export interface ProjectProduct extends Base {
   projectId: string; catalogItemId: string | null; serviceId: string | null; name: string; targetQuantity: number | null; notes: string | null; samples?: Sample[];
+  /** This product line's own stage track (stages per product line). */
+  currentStageId: string | null; stages?: ProjectStage[]; stageSummary?: { done: number; total: number; current: string | null } | null;
 }
 export interface Quote extends Base { projectId: string; quoteNo: string; status: (typeof QUOTE_STATUSES)[number]; createdBy: string | null }
 export interface QuoteLine extends Base { quoteVersionId: string; projectProductId: string | null; description: string; quantity: string; unitPrice: string; lineTotal: string; sortOrder: number }
@@ -101,7 +112,13 @@ export interface Approval extends Base {
   projectId: string; targetType: string; documentVersionId: string | null; sampleRevisionId: string | null; quoteVersionId: string | null;
   briefVersionId: string | null; targetHash: string; approverId: string; approverRole: UserRole; confirmationText: string; approvedAt: string;
 }
-export interface QuoteVersion extends Base { quoteId: string; versionNo: number; currency: string; total: string; validUntil: string | null; documentVersionId: string | null; lines: QuoteLine[]; approvals: Approval[] }
+export interface QuoteResponse extends Base {
+  quoteId: string; quoteVersionId: string; decision: 'declined' | 'changes_requested'; note: string | null; respondedBy: string | null;
+}
+export interface QuoteVersion extends Base {
+  quoteId: string; versionNo: number; currency: string; total: string; validUntil: string | null; documentVersionId: string | null;
+  lines: QuoteLine[]; approvals: Approval[]; responses: QuoteResponse[];
+}
 export interface QuoteDetail extends Quote { versions: QuoteVersion[] }
 
 export interface ProjectRow extends Base {
@@ -130,5 +147,13 @@ export interface Service extends Base { slug: string; title: string; summary: st
 export interface Faq extends Base { serviceId: string | null; question: string; answer: string; topic: string | null; sortOrder: number; isPublished: boolean }
 export interface Redirect extends Base { fromPath: string; toPath: string; statusCode: number }
 export interface StageTemplate extends Base { name: string; stages: { name: string; requiresRole?: UserRole }[]; isDefault: boolean }
-export interface AuditEvent extends Base { actorId: string | null; action: string; entityType: string; entityId: string | null; before: unknown; after: unknown; ip: string | null }
+export interface AuditEvent extends Base {
+  actorId: string | null; actorEmail: string | null; actorRole: string | null; action: string; summary: string | null;
+  entityType: string; entityId: string | null; entityLabel: string | null; projectId: string | null; inquiryId: string | null; companyId: string | null;
+  before?: unknown; after?: unknown; ip: string | null; method: string | null; path: string | null; statusCode?: number | null; userAgent?: string | null;
+  details?: { input?: unknown; changes?: { field: string; from: unknown; to: unknown }[]; events?: unknown; result?: unknown } | null;
+}
+export interface AuditFilters {
+  entityTypes: string[]; actions: string[]; actionCounts: Record<string, number>; actors: { id: string; email: string; role: string; count: number }[];
+}
 export interface SessionRow { id: string; ip: string | null; userAgent: string | null; createdAt: string; expiresAt: string; current: boolean }

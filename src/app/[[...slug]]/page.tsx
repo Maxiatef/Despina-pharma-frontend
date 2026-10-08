@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { notFound } from 'next/navigation';
 import { SiteBody } from '@/components/SiteDocument';
 import { FormConnector } from '@/components/forms/FormConnector';
+import { PageExtras } from '@/components/forms/PageExtras';
 import { allSlugs, getPage, getPageBody, routeFromSlug } from '@/lib/site';
 import type { SitePage } from '@/lib/site';
 
@@ -14,11 +15,12 @@ export function generateStaticParams() {
   return allSlugs();
 }
 
-async function load(params: Props['params']): Promise<SitePage> {
+async function load(params: Props['params']): Promise<SitePage & { route: string }> {
   const { slug } = await params;
-  const page = getPage(routeFromSlug(slug));
+  const route = routeFromSlug(slug);
+  const page = getPage(route);
   if (!page) notFound();
-  return page;
+  return { ...page, route };
 }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -41,8 +43,9 @@ export default async function SitePageRoute({ params }: Props) {
   return (
     <>
       <SiteBody html={html} />
-      {/* The 4 project forms (contact, company profile, product brief, sample review) send to the backend. */}
+      {/* The 5 project forms (contact, company profile, product brief, sample request, sample review) send to the backend. */}
       {html.includes('data-project-form') && <FormConnector />}
+      {(page.route === '/forms/' || page.route === '/contact/') && <PageExtras route={page.route} />}
     </>
   );
 }

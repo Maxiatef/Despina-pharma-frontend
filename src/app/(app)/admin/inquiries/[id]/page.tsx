@@ -4,7 +4,7 @@ import { use, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { del, patch, post } from '@/lib/api';
-import { INQUIRY_STATUSES } from '@/lib/types';
+import { INQUIRY_STATUSES, INQUIRY_TYPES } from '@/lib/types';
 import type { InquiryDetail, ProjectDetail, StageTemplate } from '@/lib/types';
 import { Badge, ErrorBox, Kv, Loading, Modal, PageHead, fmtDate, humanize, useAction, useApi } from '@/components/app/ui';
 import { DocumentsPanel, MessagesPanel, TasksPanel, Timeline } from '@/components/app/panels';
@@ -49,10 +49,11 @@ export default function InquiryPage({ params }: { params: Promise<{ id: string }
     <>
       <p className="small"><Link href="/admin/inquiries/">← Inquiries</Link></p>
       <PageHead
-        eyebrow={humanize(d.formType)}
+        eyebrow={d.inquiryType ? `${humanize(d.formType)} · ${INQUIRY_TYPES[d.inquiryType] ?? d.inquiryType}` : humanize(d.formType)}
         title={<span className="row">{d.referenceNo} <Badge value={d.status} /></span>}
         sub={<>Received {fmtDate(d.createdAt, true)}{d.sourcePage && <> from <a href={d.sourcePage} target="_blank" rel="noreferrer">{d.sourcePage.split('?')[0]}</a></>}</>}
       >
+        {me?.role === 'admin' && <Link className="btn secondary" href={`/admin/audit/?inquiryId=${d.id}`}>Audit history</Link>}
         {d.project ? (
           <Link className="btn accent" href={`/admin/projects/${d.project.id}/`}>Project {d.project.code}</Link>
         ) : canConvert && (

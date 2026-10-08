@@ -4,7 +4,7 @@ import { Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { qs } from '@/lib/api';
-import { FORM_TYPES, INQUIRY_STATUSES } from '@/lib/types';
+import { FORM_TYPES, INQUIRY_STATUSES, INQUIRY_TYPES } from '@/lib/types';
 import type { InquiryRow, Paged } from '@/lib/types';
 import { Badge, Empty, ErrorBox, Loading, PageHead, Pager, fmtDate, humanize, useApi } from '@/components/app/ui';
 import { useQueryState } from '@/components/app/useQueryState';
@@ -19,7 +19,7 @@ function Inquiries() {
   const view = values.view === 'board' ? 'board' : 'table';
 
   const filters = {
-    q: values.q, status: all('status'), formType: values.formType, assigneeId: values.assigneeId,
+    q: values.q, status: all('status'), formType: values.formType, inquiryType: values.inquiryType, assigneeId: values.assigneeId,
     unassigned: values.unassigned, overdue: values.overdue, from: values.from, to: values.to, sort: values.sort,
   };
   const page = Number(values.page ?? 1);
@@ -53,6 +53,10 @@ function Inquiries() {
             <option value="">All forms</option>
             {FORM_TYPES.map((s) => <option key={s} value={s}>{humanize(s)}</option>)}
           </select>
+          <select className="input" value={values.inquiryType ?? ''} onChange={(e) => set({ inquiryType: e.target.value })} aria-label="Inquiry type">
+            <option value="">All inquiry types</option>
+            {Object.entries(INQUIRY_TYPES).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
           <select className="input" value={values.assigneeId ?? (values.unassigned === 'true' ? '_none' : '')} aria-label="Assignee"
             onChange={(e) => e.target.value === '_none' ? set({ assigneeId: undefined, unassigned: 'true' }) : set({ assigneeId: e.target.value, unassigned: undefined })}>
             <option value="">Anyone</option>
@@ -85,7 +89,7 @@ function Inquiries() {
                         <td><Link href={`/admin/inquiries/${i.id}/`} className="mono" onClick={(e) => e.stopPropagation()}>{i.referenceNo}</Link></td>
                         <td>{[i.contact.firstName, i.contact.lastName].filter(Boolean).join(' ')}<div className="muted small">{i.contact.email}</div></td>
                         <td>{i.companyName ?? '—'}</td>
-                        <td>{humanize(i.formType)}</td>
+                        <td>{humanize(i.formType)}{i.inquiryType && <div className="muted small">{INQUIRY_TYPES[i.inquiryType] ?? i.inquiryType}</div>}</td>
                         <td><Badge value={i.status} /></td>
                         <td className="small">{i.assignee?.email ?? <span className="muted">—</span>}</td>
                         <td className="small">{i.nextDueAt ? <span className={new Date(i.nextDueAt) < new Date() ? 'badge bad' : ''}>{fmtDate(i.nextDueAt)}</span> : '—'}</td>

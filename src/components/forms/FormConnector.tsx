@@ -14,16 +14,34 @@ import { ApiError, get, post, qs, uploadFile } from '@/lib/api';
  *  - adds an invisible honeypot field against spam bots;
  *  - updates the copy that said nothing is sent.
  */
-type Mode = 'contact' | 'customer' | 'product' | 'sample';
+type Mode = 'contact' | 'customer' | 'product' | 'sample' | 'sample_request';
 
 const BUTTON_TEXT: Record<Mode, string> = {
   contact: 'Send inquiry',
   customer: 'Send company profile',
   product: 'Send product brief',
   sample: 'Send sample review',
+  sample_request: 'Send sample request',
 };
-const TITLES: Record<Mode, string> = { sample: 'SAMPLE REVIEW', customer: 'BRAND PROFILE', product: 'PROJECT BRIEF', contact: 'INQUIRY' };
-const FILES: Record<Mode, string> = { sample: 'Sample-Review', customer: 'Brand-Profile', product: 'Project-Brief', contact: 'Inquiry' };
+const TITLES: Record<Mode, string> = {
+  sample: 'SAMPLE REVIEW', customer: 'BRAND PROFILE', product: 'PROJECT BRIEF', contact: 'INQUIRY', sample_request: 'SAMPLE REQUEST',
+};
+const FILES: Record<Mode, string> = {
+  sample: 'Sample-Review', customer: 'Brand-Profile', product: 'Project-Brief', contact: 'Inquiry', sample_request: 'Sample-Request',
+};
+
+/** Contact-form topics: [API code, label shown]. Some point to a more detailed form. */
+const INQUIRY_TYPES: [code: string, label: string, form?: [href: string, text: string]][] = [
+  ['general', 'General question'],
+  ['new_product', 'New product development', ['/new-product-profile/', 'For a full product brief, use the product brief form']],
+  ['private_label', 'Private label / stock formula', ['/products/', 'Browse the product library to pick a starting point']],
+  ['sample_request', 'Sample request', ['/sample-request/', 'Use the sample request form to add the shipping details']],
+  ['quotation', 'Quotation / pricing', ['/new-product-profile/', 'A product brief helps us quote accurately']],
+  ['packaging_filling', 'Packaging & filling'],
+  ['existing_project', 'Existing project', ['/login/', 'Customers with a workspace can also message us there']],
+  ['partnership', 'Partnership / supplier'],
+  ['other', 'Other'],
+];
 const POLICY_VERSION = '2026-10';
 const SKIP = new Set(['_privacy', '_marketing', '_hp']);
 
@@ -143,6 +161,44 @@ function requireConsent(form: HTMLFormElement): () => void {
   return () => box.removeEventListener('change', sync);
 }
 
+/** Contact form: required "Inquiry type" select (pre-selected from ?type=), with a link to the matching detailed form. */
+function addInquiryType(form: HTMLFormElement, params: URLSearchParams) {
+  if (form.querySelector('[name="inquiryType"]')) return;
+  const before = form.querySelector('textarea[name="message"]')?.closest('label');
+  if (!before) return;
+  const label = document.createElement('label');
+  label.className = 'field full';
+  label.innerHTML =
+    'Inquiry type <span>*</span><select data-label="Inquiry type" name="inquiryType" required><option value="">Choose an option</option>' +
+    INQUIRY_TYPES.map(([code, text]) => `<option value="${text}" data-code="${code}">${text}</option>`).join('') +
+    '</select><small class="inquiry-type-hint"></small>';
+  before.before(label);
+  const select = label.querySelector('select')!;
+  const hint = label.querySelector<HTMLElement>('.inquiry-type-hint')!;
+  hint.style.cssText = 'margin-top:6px;font-size:.84rem';
+  const sync = () => {
+    const target = INQUIRY_TYPES.find(([, text]) => text === select.value)?.[2];
+    hint.style.display = target ? 'block' : 'none';
+    if (target) hint.innerHTML = `${target[1]}: <a href="${target[0]}" style="color:#007f9e;text-decoration:underline;text-underline-offset:3px">open it</a>`;
+  };
+  select.addEventListener('change', sync);
+  const wanted = params.get('type')?.toLowerCase();
+  const preset = INQUIRY_TYPES.find(([code, text]) => code === wanted || text.toLowerCase() === wanted);
+  if (preset) select.value = preset[1];
+  sync();
+}
+
+/** Sample request: pre-fill the product from ?product= or ?format= (links from product pages). */
+function prefillSampleRequest(form: HTMLFormElement, params: URLSearchParams) {
+  const product = params.get('product') || params.get('format');
+  const input = form.querySelector<HTMLInputElement>('[name="productName"]');
+  if (product && input && !input.value) input.value = product;
+  const category = params.get('category');
+  const select = form.querySelector<HTMLSelectElement>('[name="category"]');
+  const match = category && select && [...select.options].find((o) => o.value.toLowerCase() === category.toLowerCase());
+  if (match) select!.value = match.value;
+}
+
 function updateCopy(form: HTMLFormElement, mode: Mode) {
   const note = form.querySelector('.form-bottom p');
   if (note) note.textContent = 'When you send this form, your details go securely to the Despina Pharma team. You will get a reference number and a confirmation email.';
@@ -183,6 +239,8 @@ export function FormConnector() {
     if (!form || !dialog) return;
     const mode = (form.dataset.mode as Mode) ?? 'contact';
     const params = new URLSearchParams(location.search);
+    if (mode === 'contact') addInquiryType(form, params);
+    if (mode === 'sample_request') prefillSampleRequest(form, params);
     addConsentAndHoneypot(form);
     updateCopy(form, mode);
     const stopConsent = requireConsent(form);
@@ -238,7 +296,7 @@ export function FormConnector() {
         const [given, ...rest] = first(data.fields.name).split(/\s+/);
         const companyName = first(data.fields.company) || first(data.fields.brandName);
         const service = params.get('service') || first(data.fields.service);
-        const items: Record<string, unknown>[] = mode === 'product' ? await catalogItems(params) : [];
+        const items: Record<string, unknown>[] = mode === 'product' || mode === 'sample_request' ? await catalogItems(params) : [];
         const slug = service ? await serviceSlug(service) : undefined;
         if (slug) items.push({ serviceSlug: slug });
         const uploads = [];
@@ -248,14 +306,19 @@ export function FormConnector() {
           mode === 'contact' ? 'contact'
           : mode === 'customer' ? 'new_customer'
           : mode === 'sample' ? 'sample_feedback'
+          : mode === 'sample_request' ? 'sample_request'
           : service && !items.some((i) => i.catalogPath || i.catalogItemId) ? 'service'
           : 'new_product';
+        const inquiryType = mode === 'contact'
+          ? INQUIRY_TYPES.find(([, text]) => text === first(data.fields.inquiryType))?.[0]
+          : undefined;
         const message =
           first(data.fields.message) || first(data.fields.idea) || first(data.fields.observations) ||
           first(data.fields.brand) || first(data.fields.comments) || undefined;
 
         const result = await post<{ referenceNo: string; duplicate: boolean }>('/inquiries', {
           formType,
+          inquiryType,
           idempotencyKey: idempotencyKey(),
           contact: {
             firstName: given || first(data.fields.email),

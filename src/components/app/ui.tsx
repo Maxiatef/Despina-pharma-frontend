@@ -105,7 +105,7 @@ const TONE: Record<string, string> = {
   not_a_fit: 'bad', active: 'ok', on_hold: 'warn', completed: 'navy', cancelled: 'bad', draft: '', sent: 'info', accepted: 'ok',
   rejected: 'bad', expired: 'warn', requested: 'info', in_development: 'warn', shipped: 'info', feedback_received: 'navy',
   approved: 'ok', queued: 'warn', sending: 'info', failed: 'bad', pending: 'warn', clean: 'ok', infected: 'bad', urgent: 'bad',
-  high: 'warn', normal: '', low: '', internal: '', customer: 'info',
+  high: 'warn', normal: '', low: '', internal: '', customer: 'info', changes_requested: 'warn', declined: 'bad', unassigned: 'warn',
 };
 
 export function Badge({ value, tone }: { value: string | null | undefined; tone?: string }) {
