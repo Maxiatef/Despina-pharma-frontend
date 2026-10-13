@@ -125,7 +125,7 @@ export default function DashboardPage() {
                   {Object.entries(o.data.emailsLast30Days).map(([k, v]) => <Badge key={k} value={`${k}: ${v}`} tone={k === 'failed' ? 'bad' : k === 'sent' ? 'ok' : 'warn'} />)}
                   {!Object.keys(o.data.emailsLast30Days).length && <span className="muted small">None</span>}
                 </div>
-                <p className="small muted" style={{ marginTop: 8 }}>Email sending is not connected yet (Resend). Emails wait in the queue.</p>
+                <p className="small muted" style={{ marginTop: 8 }}><Link href="/admin/emails/">E-mail log</Link>{me?.role === 'admin' && <> · <Link href="/admin/settings/emails/">E-mail settings</Link></>}</p>
               </div>
             </div>
           </div>

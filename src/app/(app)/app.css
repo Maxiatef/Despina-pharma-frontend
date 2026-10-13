@@ -161,6 +161,7 @@ table.table { width: 100%; border-collapse: collapse; font-size: .87rem; }
 .alert { border-radius: 8px; padding: 10px 14px; font-size: .86rem; border: 1px solid; }
 .alert.error { background: var(--bad-bg); color: var(--bad); border-color: #f4cbc7; }
 .alert.success { background: var(--ok-bg); color: var(--ok); border-color: #bfe6d5; }
+.alert.warn { background: #fff7e6; color: #8a5300; border-color: #f5d9a8; }
 .alert.info { background: var(--info-bg); color: var(--navy); border-color: #c4ecf3; }
 .toasts { position: fixed; right: 20px; bottom: 20px; display: flex; flex-direction: column; gap: 8px; z-index: 100; }
 .toast { background: var(--navy); color: #fff; border-radius: 8px; padding: 10px 16px; box-shadow: var(--shadow); font-size: .86rem; max-width: 380px; }

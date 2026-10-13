@@ -18,7 +18,7 @@ export const SAMPLE_STATUSES = ['requested', 'in_development', 'shipped', 'feedb
 export const QUOTE_STATUSES = ['draft', 'sent', 'accepted', 'rejected', 'expired', 'changes_requested'] as const;
 export const TASK_PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
 export const CATALOG_KINDS = ['stock-reference', 'concept', 'base', 'development-program', 'despina-formula', 'assortment', 'product-type', 'format-option', 'program-service'] as const;
-export const EMAIL_JOB_STATUSES = ['queued', 'sending', 'sent', 'failed'] as const;
+export const EMAIL_JOB_STATUSES = ['queued', 'sending', 'sent', 'failed', 'skipped'] as const;
 
 export interface Me {
   id: string;
@@ -46,6 +46,8 @@ export interface Company extends Base { name: string; website: string | null; co
 export interface Contact extends Base {
   companyId: string | null; firstName: string; lastName: string | null; email: string; phone: string | null;
   jobTitle: string | null; country: string | null; company?: Company | null;
+  /** "bounced" / "complained" from the Resend webhook – not e-mailed until cleared. */
+  emailStatus?: string | null; emailStatusAt?: string | null; emailStatusDetail?: string | null;
 }
 export interface User extends Base { email: string; role: UserRole; isActive: boolean; mfaEnabled: boolean; lastLoginAt: string | null; contactId: string | null }
 
@@ -84,6 +86,20 @@ export interface Doc extends Base {
 export interface EmailJob extends Base {
   inquiryId: string | null; projectId: string | null; kind: string; toEmail: string; subject: string; status: string;
   attempts: number; lastError: string | null; sentAt: string | null; providerMessageId: string | null;
+  template?: string | null; lastEvent?: string | null; lastEventAt?: string | null; bodyHtml?: string | null; bodyText?: string | null;
+}
+export interface EmailEventRow { id: string; event: string; occurredAt: string }
+
+export interface EmailSettingsResponse {
+  values: Record<string, string | null>;
+  status: {
+    provider: string; resendKeySet: boolean; webhookSecretSet: boolean; webhookUrl: string; sendingEnabled: boolean;
+    sender: { name: string; email: string; replyTo: string; from: string }; onboardingSender: boolean; fallbackRecipient: string | null;
+    counts: { sent: number; failed: number; waiting: number; skipped: number };
+  };
+  staffNotifications: { key: string; label: string; description: string; recipients: 'list' | 'person' | 'list+person' }[];
+  customerEmails: { key: string; label: string; description: string }[];
+  accountEmails: { key: string; label: string; description: string }[];
 }
 
 export interface InquiryDetail extends Omit<InquiryRow, 'contact' | 'companyName' | 'assignee' | 'nextDueAt'> {

@@ -4,65 +4,99 @@ import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { post, qs } from '@/lib/api';
 import { EMAIL_JOB_STATUSES } from '@/lib/types';
-import type { EmailJob, Paged } from '@/lib/types';
-import { Badge, Empty, ErrorBox, Loading, Modal, PageHead, Pager, fmtDate, humanize, useAction, useApi } from '@/components/app/ui';
+import type { EmailEventRow, EmailJob, Paged } from '@/lib/types';
+import { Badge, Empty, ErrorBox, Kv, Loading, Modal, PageHead, Pager, fmtDate, humanize, useAction, useApi } from '@/components/app/ui';
 import { useQueryState } from '@/components/app/useQueryState';
+import { useAuth } from '@/components/app/auth';
 
-function Events({ jobId }: { jobId: string }) {
-  const ev = useApi<{ id: string; event: string; occurredAt: string }[]>(`/email-jobs/${jobId}/events`);
-  if (!ev.data) return <Loading />;
-  return ev.data.length ? (
-    <ul className="timeline">{ev.data.map((e) => <li key={e.id}><div className="when">{fmtDate(e.occurredAt, true)}</div><Badge value={e.event} /></li>)}</ul>
-  ) : <p className="small muted">No delivery events yet. They arrive from the email provider’s webhook once Resend is connected.</p>;
+const KINDS = ['owner_notice', 'staff_notice', 'customer_ack', 'customer_notice', 'message_notice', 'quote_notice', 'invite', 'password_reset', 'test'];
+
+/** The e-mail exactly as it was sent, plus what Resend reported about its delivery. */
+function Preview({ id }: { id: string }) {
+  const job = useApi<EmailJob & { events: EmailEventRow[] }>(`/email-jobs/${id}`);
+  const [mode, setMode] = useState<'html' | 'text'>('html');
+  if (!job.data) return job.loading ? <Loading /> : <ErrorBox error={job.error} />;
+  const j = job.data;
+  return (
+    <div className="stack">
+      <Kv rows={[
+        ['To', j.toEmail], ['Subject', j.subject], ['Status', <Badge key="s" value={j.status} />], ['Template', j.template ? humanize(j.template) : humanize(j.kind)],
+        ['Sent', j.sentAt ? fmtDate(j.sentAt, true) : '—'], ['Problem', j.lastError], ['Resend id', j.providerMessageId && <span key="p" className="mono small">{j.providerMessageId}</span>],
+      ]} />
+      <div>
+        <span className="eyebrow">Delivery events</span>
+        {j.events.length ? (
+          <ul className="timeline" style={{ marginTop: 6 }}>{j.events.map((e) => <li key={e.id}><div className="when">{fmtDate(e.occurredAt, true)}</div><Badge value={e.event} /></li>)}</ul>
+        ) : <p className="small muted">No delivery events yet – Resend reports them through the webhook (delivered, bounced, spam …).</p>}
+      </div>
+      <div className="tabs" style={{ margin: 0 }}>
+        <button type="button" className={mode === 'html' ? 'active' : ''} onClick={() => setMode('html')}>E-mail</button>
+        <button type="button" className={mode === 'text' ? 'active' : ''} onClick={() => setMode('text')}>Plain text</button>
+      </div>
+      {mode === 'html' && j.bodyHtml
+        ? <iframe title="E-mail" sandbox="" srcDoc={j.bodyHtml} style={{ width: '100%', height: '60vh', border: '1px solid var(--line-2)', borderRadius: 8, background: '#fff' }} />
+        : <pre className="pre small" style={{ maxHeight: '60vh', overflow: 'auto' }}>{j.bodyText ?? '(no text)'}</pre>}
+    </div>
+  );
 }
 
 function Emails() {
+  const { me } = useAuth();
   const { values, set } = useQueryState();
   const page = Number(values.page ?? 1);
-  const list = useApi<Paged<EmailJob>>(`/email-jobs${qs({ status: values.status, page, pageSize: 50 })}`);
+  const list = useApi<Paged<EmailJob>>(`/email-jobs${qs({ status: values.status, kind: values.kind, q: values.q, page, pageSize: 50 })}`);
   const { busy, run } = useAction();
-  const [open, setOpen] = useState<EmailJob | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
   return (
     <>
-      <PageHead eyebrow="Settings" title="Email log" sub="Every email the system wants to send. Sending is not connected yet (Resend), so emails stay queued." />
-      <div className="alert info" style={{ marginBottom: 16 }}>
-        Email provider: <b>not connected</b>. Owner notices, customer confirmations, invites and reminders are stored here and will be sent automatically once Resend is set up.
-      </div>
+      <PageHead eyebrow="Settings" title="Email log" sub="Every e-mail the system sent or tried to send, exactly as the recipient sees it.">
+        {me?.role === 'admin' && <Link className="btn secondary" href="/admin/settings/emails/">E-mail settings</Link>}
+      </PageHead>
       <div className="card">
-        <div className="toolbar" style={{ padding: '14px 16px 0' }}>
-          <select className="input" value={values.status ?? ''} onChange={(e) => set({ status: e.target.value })} aria-label="Status">
+        <form className="toolbar" style={{ padding: '14px 16px 0' }} onSubmit={(e) => { e.preventDefault(); set({ q: String(new FormData(e.currentTarget).get('q') ?? '') || undefined }); }}>
+          <input className="input grow" name="q" type="search" defaultValue={values.q ?? ''} placeholder="Search recipient or subject…" aria-label="Search" />
+          <select className="input" value={values.status ?? ''} onChange={(e) => set({ status: e.target.value || undefined })} aria-label="Status">
             <option value="">All statuses</option>{EMAIL_JOB_STATUSES.map((s) => <option key={s} value={s}>{humanize(s)}</option>)}
           </select>
-        </div>
+          <select className="input" value={values.kind ?? ''} onChange={(e) => set({ kind: e.target.value || undefined })} aria-label="Kind">
+            <option value="">All kinds</option>{KINDS.map((k) => <option key={k} value={k}>{humanize(k)}</option>)}
+          </select>
+        </form>
         <ErrorBox error={list.error} onRetry={list.reload} />
         {list.loading && !list.data ? <Loading /> : list.data && (
           <>
-            <table className="table">
-              <thead><tr><th>Kind</th><th>To</th><th>Subject</th><th>Status</th><th>Related</th><th>Created</th><th /></tr></thead>
-              <tbody>
-                {list.data.items.map((j) => (
-                  <tr key={j.id}>
-                    <td>{humanize(j.kind)}</td><td className="small">{j.toEmail}</td><td className="small">{j.subject}</td>
-                    <td><Badge value={j.status} />{j.lastError && <div className="small muted">{j.lastError}</div>}</td>
-                    <td className="small">
-                      {j.inquiryId && <Link href={`/admin/inquiries/${j.inquiryId}/`}>Lead</Link>}
-                      {j.projectId && <Link href={`/admin/projects/${j.projectId}/`}>Project</Link>}
-                    </td>
-                    <td className="small muted">{fmtDate(j.createdAt, true)}</td>
-                    <td><div className="row">
-                      <button className="btn small ghost" onClick={() => setOpen(j)}>Events</button>
-                      {j.status === 'failed' && <button className="btn small secondary" disabled={busy} onClick={async () => { if (await run(() => post(`/email-jobs/${j.id}/retry`), 'Retry queued')) list.reload(); }}>Retry</button>}
-                    </div></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {!list.data.items.length && <Empty>No emails.</Empty>}
+            <div className="table-wrap">
+              <table className="table">
+                <thead><tr><th>Sent / created</th><th>To</th><th>Subject</th><th>Status</th><th>Related</th><th /></tr></thead>
+                <tbody>
+                  {list.data.items.map((j) => (
+                    <tr key={j.id}>
+                      <td className="small muted" style={{ whiteSpace: 'nowrap' }}>{fmtDate(j.sentAt ?? j.createdAt, true)}</td>
+                      <td className="small">{j.toEmail}<div className="muted">{humanize(j.template ?? j.kind)}</div></td>
+                      <td className="small">{j.subject}</td>
+                      <td>
+                        <Badge value={j.status} />{j.lastEvent && j.lastEvent !== 'sent' && <> <Badge value={j.lastEvent} /></>}
+                        {j.lastError && <div className="small muted" style={{ maxWidth: 280 }}>{j.lastError}</div>}
+                      </td>
+                      <td className="small">
+                        {j.inquiryId && <Link href={`/admin/inquiries/${j.inquiryId}/`}>Lead</Link>}
+                        {j.projectId && <Link href={`/admin/projects/${j.projectId}/`}>Project</Link>}
+                      </td>
+                      <td><div className="row">
+                        <button className="btn small ghost" onClick={() => setOpen(j.id)}>View</button>
+                        {j.status === 'failed' && <button className="btn small secondary" disabled={busy} onClick={async () => { if (await run(() => post(`/email-jobs/${j.id}/retry`), 'Sent again')) list.reload(); }}>Retry</button>}
+                      </div></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {!list.data.items.length && <Empty>No e-mails.</Empty>}
             <Pager page={page} pageSize={50} total={list.data.total} onPage={(p) => set({ page: String(p) }, false)} />
           </>
         )}
       </div>
-      <Modal open={!!open} title={open?.subject ?? ''} onClose={() => setOpen(null)}>{open && <Events jobId={open.id} />}</Modal>
+      <Modal open={!!open} title="E-mail" onClose={() => setOpen(null)}>{open && <Preview id={open} />}</Modal>
     </>
   );
 }

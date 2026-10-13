@@ -46,6 +46,7 @@ function staffNav(newLeads?: number): NavGroup[] {
         { href: '/admin/users/', label: 'Users', roles: ADMIN_ONLY },
         { href: '/admin/stage-templates/', label: 'Project stages' },
         { href: '/admin/emails/', label: 'Email log' },
+        { href: '/admin/settings/emails/', label: 'Email settings', roles: ADMIN_ONLY },
         { href: '/admin/audit/', label: 'Audit log', roles: ADMIN_ONLY },
         { href: '/admin/account/', label: 'My account' },
       ],

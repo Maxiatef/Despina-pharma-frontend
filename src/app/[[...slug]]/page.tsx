@@ -5,6 +5,7 @@ import { FormConnector } from '@/components/forms/FormConnector';
 import { PageExtras } from '@/components/forms/PageExtras';
 import { allSlugs, getPage, getPageBody, routeFromSlug } from '@/lib/site';
 import type { SitePage } from '@/lib/site';
+import { pageJsonLd, pageMetadata } from '@/lib/seo';
 
 type Props = { params: Promise<{ slug?: string[] }> };
 
@@ -25,11 +26,7 @@ async function load(params: Props['params']): Promise<SitePage & { route: string
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const page = await load(params);
-  return {
-    title: { absolute: page.title },
-    description: page.description ?? undefined,
-    icons: page.icon ? { icon: { url: page.icon[1], type: page.icon[0] } } : undefined,
-  };
+  return pageMetadata(page.route, page);
 }
 
 export async function generateViewport({ params }: Props): Promise<Viewport> {
@@ -40,8 +37,13 @@ export async function generateViewport({ params }: Props): Promise<Viewport> {
 export default async function SitePageRoute({ params }: Props) {
   const page = await load(params);
   const html = getPageBody(page);
+  // JSON-LD (breadcrumbs, organisation, FAQ, article); "<" is escaped so page text cannot end the script tag.
+  const jsonLd = pageJsonLd(page.route, page);
   return (
     <>
+      {jsonLd.map((data, i) => (
+        <script key={i} type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(data).replace(/</g, '\\u003c') }} />
+      ))}
       <SiteBody html={html} />
       {/* The 5 project forms (contact, company profile, product brief, sample request, sample review) send to the backend. */}
       {html.includes('data-project-form') && <FormConnector />}

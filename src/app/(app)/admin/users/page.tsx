@@ -18,14 +18,15 @@ function Users() {
   const [open, setOpen] = useState(false);
   const [role, setRole] = useState('sales');
   const [link, setLink] = useState<string | null>(null);
+  const [mail, setMail] = useState<{ status?: string; error?: string | null } | null>(null);
   const companies = useApi<Paged<Company>>(open && role === 'customer' ? '/companies?pageSize=200' : null);
   const { busy, run } = useAction();
   const origin = typeof window === 'undefined' ? '' : window.location.origin;
 
   async function invite(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const r = await run(() => post<{ inviteToken: string }>('/users/invite', formValues(e.currentTarget)), 'Invitation created');
-    if (r) { setLink(`${origin}/accept-invite/?token=${r.inviteToken}`); list.reload(); }
+    const r = await run(() => post<{ inviteToken: string; emailStatus?: string; emailError?: string | null }>('/users/invite', formValues(e.currentTarget)), 'Invitation created');
+    if (r) { setLink(`${origin}/accept-invite/?token=${r.inviteToken}`); setMail({ status: r.emailStatus, error: r.emailError }); list.reload(); }
   }
 
   return (
@@ -63,8 +64,8 @@ function Users() {
                       <div className="row" style={{ justifyContent: 'flex-end' }}>
                         {!u.lastLoginAt && (
                           <button className="btn small ghost" disabled={busy} onClick={async () => {
-                            const r = await run(() => post<{ inviteToken: string }>(`/users/${u.id}/resend-invite`), 'New invitation created');
-                            if (r) { setLink(`${origin}/accept-invite/?token=${r.inviteToken}`); setOpen(true); }
+                            const r = await run(() => post<{ inviteToken: string; emailStatus?: string; emailError?: string | null }>(`/users/${u.id}/resend-invite`), 'New invitation created');
+                            if (r) { setLink(`${origin}/accept-invite/?token=${r.inviteToken}`); setMail({ status: r.emailStatus, error: r.emailError }); setOpen(true); }
                           }}>Resend invite</button>
                         )}
                         {u.mfaEnabled && <button className="btn small ghost" disabled={busy} onClick={async () => { if (confirm(`Reset two-factor login for ${u.email}?`) && await run(() => post(`/users/${u.id}/reset-mfa`), 'Two-factor reset')) list.reload(); }}>Reset 2FA</button>}
@@ -88,7 +89,7 @@ function Users() {
       <Modal open={open} title="Invite user" onClose={() => setOpen(false)}>
         {link ? (
           <div className="stack">
-            <div className="alert success">Invitation ready. The email is queued; until email sending is connected, send this link yourself (valid 72 hours):</div>
+            <div className={`alert ${mail?.status === 'skipped' ? 'warn' : 'success'}`}>{mail?.status === 'skipped' ? `The e-mail was not sent (${mail.error ?? 'skipped'}). Share this link yourself (valid 72 hours):` : 'The invitation e-mail is on its way. If it does not arrive, share this link (valid 72 hours):'}</div>
             <input className="input mono" readOnly value={link} onFocus={(e) => e.target.select()} />
             <button className="btn secondary" onClick={() => navigator.clipboard.writeText(link)}>Copy link</button>
           </div>

@@ -10,7 +10,7 @@ import type {
 } from './workspace-types';
 import { isStaff, useAuth } from './auth';
 import { DocumentsPanel, MessagesPanel, TasksPanel } from './panels';
-import { Badge, Empty, ErrorBox, Kv, Loading, Modal, PageHead, fmtDate, fmtMoney, humanize, useAction, useApi } from './ui';
+import { Badge, Empty, ErrorBox, Kv, Loading, Modal, PageHead, approvalsChanged, fmtDate, fmtMoney, humanize, useAction, useApi, useApprovalsChanged } from './ui';
 
 // ===================================================================== stages
 function Stages({ project, reload, staff }: { project: ProjectDetail; reload: () => void; staff: boolean }) {
@@ -184,7 +184,7 @@ function Briefs({ product, projectId }: { product: ProjectProduct; projectId: st
                 {i === 0 && (
                   <form className="row" style={{ marginTop: 10 }} onSubmit={async (e) => {
                     e.preventDefault();
-                    if (await run(() => post(`/projects/${projectId}/approvals`, { targetType: 'brief_version', targetId: v.id, confirmationText: confirm }), 'Brief version approved')) setConfirm('');
+                    if (await run(() => post(`/projects/${projectId}/approvals`, { targetType: 'brief_version', targetId: v.id, confirmationText: confirm }), 'Brief version approved')) { setConfirm(''); approvalsChanged(); }
                   }}>
                     <input className="input" style={{ flex: 1 }} required minLength={5} placeholder={`Type: I approve version ${v.versionNo} of this brief`} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
                     <button className="btn small" disabled={busy}>Approve this version</button>
@@ -233,6 +233,10 @@ function SampleCard({ sampleId, projectId, staff }: { sampleId: string; projectI
           <div className="row between"><b style={{ fontWeight: 500 }}>Revision {r.revisionNo}</b><span className="muted">{r.shippedAt ? `Shipped ${fmtDate(r.shippedAt)}` : 'In development'}{r.trackingNo && ` · ${r.trackingNo}`}</span></div>
           {r.description && <p className="pre">{r.description}</p>}
           {r.feedback.map((f) => <p key={f.id} className="muted">★ {f.rating ?? '–'}/5 — {f.comments}</p>)}
+          {staff && r.shippedAt && (
+            <button className="btn small ghost" style={{ marginTop: 6 }} disabled={busy} title="E-mail the customer asking for feedback on this revision"
+              onClick={() => run(() => post(`/sample-revisions/${r.id}/request-feedback`), `Feedback requested for revision ${r.revisionNo}`)}>Ask for feedback</button>
+          )}
           {staff && !r.shippedAt && (
             <form className="row" style={{ marginTop: 6 }} onSubmit={async (e) => { e.preventDefault(); if (await run(() => patch(`/sample-revisions/${r.id}`, { shippedAt: new Date().toISOString(), trackingNo: tracking || undefined }), 'Marked as shipped')) { setTracking(''); s.reload(); } }}>
               <input className="input" placeholder="Tracking number" value={tracking} onChange={(e) => setTracking(e.target.value)} />
@@ -254,16 +258,16 @@ function SampleCard({ sampleId, projectId, staff }: { sampleId: string; projectI
       {latest && !staff && (
         <form className="row" style={{ marginTop: 10 }} onSubmit={async (e) => {
           e.preventDefault();
-          if (await run(() => post(`/projects/${projectId}/approvals`, { targetType: 'sample_revision', targetId: latest.id, confirmationText: confirm }), 'Sample approved')) { setConfirm(''); s.reload(); }
+          if (await run(() => post(`/projects/${projectId}/approvals`, { targetType: 'sample_revision', targetId: latest.id, confirmationText: confirm }), 'Sample approved')) { setConfirm(''); s.reload(); approvalsChanged(); }
         }}>
           <input className="input" style={{ flex: 1 }} required minLength={5} placeholder={`Type: I approve sample revision ${latest.revisionNo}`} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
           <button className="btn small accent" disabled={busy}>Approve sample</button>
         </form>
       )}
       {staff && (
-        <form className="row" style={{ marginTop: 12 }} onSubmit={async (e) => { e.preventDefault(); if (await run(() => post(`/samples/${sampleId}/revisions`, { description: desc || undefined }), 'Revision added')) { setDesc(''); s.reload(); } }}>
-          <input className="input" style={{ flex: 1 }} placeholder="New revision – what changed?" value={desc} onChange={(e) => setDesc(e.target.value)} />
-          <button className="btn small secondary" disabled={busy}>Add revision</button>
+        <form className="row" style={{ marginTop: 12 }} onSubmit={async (e) => { e.preventDefault(); if (await run(() => post(`/samples/${sampleId}/revisions`, { description: desc.trim() }), 'Revision added')) { setDesc(''); s.reload(); } }}>
+          <input className="input" style={{ flex: 1 }} required placeholder="New revision – what changed?" value={desc} onChange={(e) => setDesc(e.target.value)} />
+          <button className="btn small secondary" disabled={busy || !desc.trim()}>Add revision</button>
         </form>
       )}
     </div>
@@ -400,7 +404,7 @@ function QuoteView({ quoteId, projectId, staff, onChanged }: { quoteId: string; 
           {!staff && q.data.status === 'sent' && (
             <form className="row" style={{ marginTop: 12 }} onSubmit={async (e) => {
               e.preventDefault();
-              if (await run(() => post(`/projects/${projectId}/approvals`, { targetType: 'quote_version', targetId: latest.id, confirmationText: confirm }), 'Quote accepted. Thank you!')) { setConfirm(''); reload(); }
+              if (await run(() => post(`/projects/${projectId}/approvals`, { targetType: 'quote_version', targetId: latest.id, confirmationText: confirm }), 'Quote accepted. Thank you!')) { setConfirm(''); reload(); approvalsChanged(); }
             }}>
               <input className="input" style={{ flex: 1 }} required minLength={5} placeholder={`Type: I accept quote ${q.data.quoteNo} version ${latest.versionNo}`} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
               <button className="btn accent" disabled={busy}>Accept quote</button>
@@ -471,6 +475,7 @@ function Quotes({ project, staff, reload }: { project: ProjectDetail; staff: boo
 // ===================================================================== approvals + timeline
 function Approvals({ projectId }: { projectId: string }) {
   const a = useApi<Approval[]>(`/projects/${projectId}/approvals`);
+  useApprovalsChanged(a.reload);
   return (
     <div className="card pad">
       <h3>Approvals</h3>

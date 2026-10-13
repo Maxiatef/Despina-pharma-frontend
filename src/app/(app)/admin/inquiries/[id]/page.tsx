@@ -87,7 +87,12 @@ export default function InquiryPage({ params }: { params: Promise<{ id: string }
             </div>
           </div>
           <DocumentsPanel path={`/inquiries/${id}/documents`} canUpload={false} />
-          <MessagesPanel path={`/inquiries/${id}/messages`} title="Reply to the customer" hint={`Emailed to ${d.contact.email}`} />
+          {d.contact.emailStatus && (
+            <div className="alert error">
+              This address {d.contact.emailStatus} earlier, so e-mails to it are not sent. Check it on the <Link href={`/admin/contacts/${d.contact.id}/`}>contact</Link> and clear the status there.
+            </div>
+          )}
+          <MessagesPanel path={`/inquiries/${id}/messages`} title="Reply to the customer" hint={`E-mailed to ${d.contact.email}`} allowAskInfo onSent={inq.reload} />
           <div className="card">
             <div className="card-head"><h2>Activity</h2></div>
             <div className="card-body">

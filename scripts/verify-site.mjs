@@ -42,7 +42,9 @@ for (let i = 0; i < routes.length; i += 16) {
     if (assetsOf(oHead) !== assetsOf(sHead)) problems.push(`${route}: head assets differ\n   expected ${assetsOf(oHead)}\n   got      ${assetsOf(sHead)}`);
     const oTitle = decode(oHead.match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? '');
     const sTitle = decode(sHead.match(/<title>([\s\S]*?)<\/title>/)?.[1] ?? '');
-    if (oTitle !== sTitle) problems.push(`${route}: title "${sTitle}" expected "${oTitle}"`);
+    // Intentional SEO change (src/lib/seo.ts TITLE_OVERRIDE): two catalog pages shared one title.
+    const allowed = route === '/formulations/haircare/styling-products-gar/' && sTitle === 'Styling products (GAR Labs) | Haircare | Despina Pharma';
+    if (oTitle !== sTitle && !allowed) problems.push(`${route}: title "${sTitle}" expected "${oTitle}"`);
     checked++;
   }));
 }

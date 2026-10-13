@@ -201,7 +201,7 @@ function prefillSampleRequest(form: HTMLFormElement, params: URLSearchParams) {
 
 function updateCopy(form: HTMLFormElement, mode: Mode) {
   const note = form.querySelector('.form-bottom p');
-  if (note) note.textContent = 'When you send this form, your details go securely to the Despina Pharma team. You will get a reference number and a confirmation email.';
+  if (note) note.textContent = 'When you send this form, your details go securely to the Despina Pharma team. You will get a reference number straight away.';
   const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
   if (button) button.textContent = BUTTON_TEXT[mode];
   form.querySelectorAll<HTMLInputElement>('input[type="file"]').forEach((input) => {
@@ -316,7 +316,7 @@ export function FormConnector() {
           first(data.fields.message) || first(data.fields.idea) || first(data.fields.observations) ||
           first(data.fields.brand) || first(data.fields.comments) || undefined;
 
-        const result = await post<{ referenceNo: string; duplicate: boolean }>('/inquiries', {
+        const result = await post<{ referenceNo: string; duplicate: boolean; confirmationEmail?: boolean }>('/inquiries', {
           formType,
           inquiryType,
           idempotencyKey: idempotencyKey(),
@@ -345,7 +345,8 @@ export function FormConnector() {
         show({
           eyebrow: 'SENT',
           title: 'Thank you. We have your details.',
-          html: `Your reference number is <strong>${result.referenceNo}</strong>. A confirmation email is on its way, and our team will reply soon. You can keep a copy below.`,
+          // Only promise an e-mail when the backend really sends one (e-mail connected and the confirmation switched on).
+          html: `Your reference number is <strong>${result.referenceNo}</strong>. ${result.confirmationEmail ? 'A confirmation email is on its way, and our' : 'Our'} team will reply soon. You can keep a copy below.`,
           brief: sent.brief,
         });
       } catch (err) {

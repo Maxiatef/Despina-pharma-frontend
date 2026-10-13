@@ -59,6 +59,19 @@ export function ToastProvider({ children }: { children: ReactNode }) {
 }
 
 /** Run an API action with a busy flag and toasts. Returns the result, or undefined on error. */
+const APPROVALS_CHANGED = 'dp:approvals-changed';
+/** Tell open Approvals lists that a new approval was recorded. */
+export function approvalsChanged() {
+  window.dispatchEvent(new Event(APPROVALS_CHANGED));
+}
+/** Run `onChange` whenever an approval is recorded anywhere on the page. */
+export function useApprovalsChanged(onChange: () => void) {
+  useEffect(() => {
+    window.addEventListener(APPROVALS_CHANGED, onChange);
+    return () => window.removeEventListener(APPROVALS_CHANGED, onChange);
+  }, [onChange]);
+}
+
 export function useAction() {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
@@ -106,6 +119,7 @@ const TONE: Record<string, string> = {
   rejected: 'bad', expired: 'warn', requested: 'info', in_development: 'warn', shipped: 'info', feedback_received: 'navy',
   approved: 'ok', queued: 'warn', sending: 'info', failed: 'bad', pending: 'warn', clean: 'ok', infected: 'bad', urgent: 'bad',
   high: 'warn', normal: '', low: '', internal: '', customer: 'info', changes_requested: 'warn', declined: 'bad', unassigned: 'warn',
+  skipped: '', delivered: 'ok', delivery_delayed: 'warn', bounced: 'bad', complaint: 'bad', complained: 'bad', opened: 'info', clicked: 'info',
 };
 
 export function Badge({ value, tone }: { value: string | null | undefined; tone?: string }) {

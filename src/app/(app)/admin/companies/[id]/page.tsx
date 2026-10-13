@@ -24,6 +24,7 @@ export default function CompanyPage({ params }: { params: Promise<{ id: string }
   const { busy, run } = useAction();
   const [invite, setInvite] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteMail, setInviteMail] = useState<{ status?: string; error?: string | null } | null>(null);
 
   if (c.loading && !c.data) return <Loading />;
   if (!c.data) return <ErrorBox error={c.error} onRetry={c.reload} />;
@@ -37,8 +38,8 @@ export default function CompanyPage({ params }: { params: Promise<{ id: string }
   async function sendInvite(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const v = formValues(e.currentTarget);
-    const r = await run(() => post<{ inviteToken: string }>('/users/invite', { email: v.email, role: 'customer', companyId: id, contactId: v.contactId || undefined, memberRole: v.memberRole }), 'Invitation created');
-    if (r) { setInviteLink(`${window.location.origin}/accept-invite/?token=${r.inviteToken}`); c.reload(); }
+    const r = await run(() => post<{ inviteToken: string; emailStatus?: string; emailError?: string | null }>('/users/invite', { email: v.email, role: 'customer', companyId: id, contactId: v.contactId || undefined, memberRole: v.memberRole }), 'Invitation created');
+    if (r) { setInviteLink(`${window.location.origin}/accept-invite/?token=${r.inviteToken}`); setInviteMail({ status: r.emailStatus, error: r.emailError }); c.reload(); }
   }
 
   return (
@@ -99,7 +100,7 @@ export default function CompanyPage({ params }: { params: Promise<{ id: string }
       <Modal open={invite} title="Invite a customer to the workspace" onClose={() => setInvite(false)}>
         {inviteLink ? (
           <div className="stack">
-            <div className="alert success">Invitation created. The email is queued; until email sending is connected, share this link yourself (valid 72 hours):</div>
+            <div className={`alert ${inviteMail?.status === 'skipped' ? 'warn' : 'success'}`}>{inviteMail?.status === 'skipped' ? `The e-mail was not sent (${inviteMail.error ?? 'skipped'}). Share this link yourself (valid 72 hours):` : 'The invitation e-mail is on its way. If it does not arrive, share this link (valid 72 hours):'}</div>
             <input className="input mono" readOnly value={inviteLink} onFocus={(e) => e.target.select()} />
             <button className="btn secondary" onClick={() => navigator.clipboard.writeText(inviteLink)}>Copy link</button>
           </div>

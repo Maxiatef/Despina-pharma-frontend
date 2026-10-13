@@ -35,6 +35,12 @@ export default function ContactPage({ params }: { params: Promise<{ id: string }
     <>
       <p className="small"><Link href="/admin/contacts/">← Contacts</Link></p>
       <PageHead eyebrow="Contact" title={[d.firstName, d.lastName].filter(Boolean).join(' ')} sub={<a href={`mailto:${d.email}`}>{d.email}</a>} />
+      {d.emailStatus && (
+        <div className="alert error row between" style={{ marginBottom: 16 }}>
+          <span>E-mails to this address are paused: it <b>{d.emailStatus}</b>{d.emailStatusAt ? ` on ${fmtDate(d.emailStatusAt, true)}` : ''}{d.emailStatusDetail ? ` (${d.emailStatusDetail})` : ''}. Fix the address, or clear the status once you have checked it.</span>
+          <button className="btn small secondary" disabled={busy} onClick={async () => { if (await run(() => post(`/contacts/${id}/clear-email-status`), 'E-mails to this contact are allowed again')) c.reload(); }}>Clear status</button>
+        </div>
+      )}
       <div className="split">
         <div className="stack">
           <div className="card pad">

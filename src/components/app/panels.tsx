@@ -6,7 +6,7 @@ import { post, patch, qs, uploadFile } from '@/lib/api';
 import { TASK_PRIORITIES } from '@/lib/types';
 import type { Doc, Message, Task, TimelineEntry } from '@/lib/types';
 import { useAuth, isStaff } from './auth';
-import { Badge, Empty, ErrorBox, Loading, fmtBytes, fmtDate, humanize, useAction, useApi } from './ui';
+import { Badge, Empty, ErrorBox, Loading, approvalsChanged, fmtBytes, fmtDate, humanize, useAction, useApi } from './ui';
 
 // ===================================================================== documents
 export function DocumentsPanel({ path, projectId, canUpload = true }: { path: string; projectId?: string; canUpload?: boolean }) {
@@ -16,6 +16,8 @@ export function DocumentsPanel({ path, projectId, canUpload = true }: { path: st
   const { busy, run } = useAction();
   const fileRef = useRef<HTMLInputElement>(null);
   const [visibility, setVisibility] = useState<'internal' | 'customer'>('customer');
+  const [approving, setApproving] = useState<string | null>(null);
+  const [approveText, setApproveText] = useState('');
 
   async function download(versionId: string) {
     const r = await run(() => post<{ url: string }>(`/document-versions/${versionId}/download-link`));
@@ -52,7 +54,7 @@ export function DocumentsPanel({ path, projectId, canUpload = true }: { path: st
             <tbody>
               {docs.data?.map((d) => {
                 const v = d.latestVersion;
-                return (
+                return [
                   <tr key={d.id}>
                     <td>
                       <b style={{ fontWeight: 500 }}>{d.title}</b>
@@ -65,10 +67,11 @@ export function DocumentsPanel({ path, projectId, canUpload = true }: { path: st
                       <div className="row" style={{ justifyContent: 'flex-end' }}>
                         {v?.scanStatus === 'clean' && <button className="btn small secondary" disabled={busy} onClick={() => download(v.id)}>Download</button>}
                         {!staff && projectId && v?.scanStatus === 'clean' && (
-                          <button className="btn small accent" disabled={busy} onClick={async () => {
-                            const text = window.prompt(`To approve “${d.title}” version ${v.versionNo}, type your confirmation:`, `I approve ${d.title} version ${v.versionNo}`);
-                            if (text && text.trim().length >= 5) await run(() => post(`/projects/${projectId}/approvals`, { targetType: 'document_version', targetId: v.id, confirmationText: text.trim() }), 'Document approved');
-                          }}>Approve</button>
+                          <button className="btn small accent" disabled={busy} onClick={() => { setApproving(v.id); setApproveText(`I approve ${d.title} version ${v.versionNo}`); }}>Approve</button>
+                        )}
+                        {staff && projectId && d.visibility === 'customer' && v?.scanStatus === 'clean' && (
+                          <button className="btn small secondary" disabled={busy} title="E-mail the customer: please review and approve this version"
+                            onClick={() => run(() => post(`/documents/${d.id}/request-approval`, {}), `Approval requested for “${d.title}” v${v.versionNo}`)}>Request approval</button>
                         )}
                         {staff && v?.scanStatus === 'pending' && (
                           <>
@@ -90,13 +93,29 @@ export function DocumentsPanel({ path, projectId, canUpload = true }: { path: st
                         )}
                       </div>
                     </td>
-                  </tr>
-                );
+                  </tr>,
+                  approving === v?.id && v && (
+                    <tr key={`${d.id}-approve`}>
+                      <td colSpan={5}>
+                        <form className="row" onSubmit={async (e) => {
+                          e.preventDefault();
+                          const ok = await run(() => post(`/projects/${projectId}/approvals`, { targetType: 'document_version', targetId: v.id, confirmationText: approveText.trim() }), 'Document approved');
+                          if (ok) { setApproving(null); docs.reload(); approvalsChanged(); }
+                        }}>
+                          <span className="small">Approve “{d.title}” v{v.versionNo} – your confirmation:</span>
+                          <input className="input" style={{ flex: 1 }} required minLength={5} autoFocus value={approveText} onChange={(e) => setApproveText(e.target.value)} aria-label="Approval confirmation" />
+                          <button className="btn small accent" disabled={busy || approveText.trim().length < 5}>Confirm approval</button>
+                          <button type="button" className="btn small ghost" onClick={() => setApproving(null)}>Cancel</button>
+                        </form>
+                      </td>
+                    </tr>
+                  ),
+                ];
               })}
             </tbody>
           </table>
           {!docs.data?.length && <Empty>No documents yet.</Empty>}
-          {staff && <p className="small muted" style={{ padding: '0 20px 14px' }}>No virus scanner is connected yet: check new files and release them before customers can download.</p>}
+          {staff && <p className="small muted" style={{ padding: '0 20px 14px' }}>No virus scanner is connected yet: check new files and release them before customers can download. Releasing a customer-visible file e-mails the customer that it is ready.</p>}
         </div>
       )}
     </div>
@@ -104,18 +123,25 @@ export function DocumentsPanel({ path, projectId, canUpload = true }: { path: st
 }
 
 // ===================================================================== messages
-export function MessagesPanel({ path, title = 'Messages', hint }: { path: string; title?: string; hint?: string }) {
+export function MessagesPanel({ path, title = 'Messages', hint, allowAskInfo = false, onSent }: {
+  path: string; title?: string; hint?: string; allowAskInfo?: boolean; onSent?: () => void;
+}) {
   const { me } = useAuth();
   const messages = useApi<Message[]>(path);
   const { busy, run } = useAction();
   const [body, setBody] = useState('');
+  const [askInfo, setAskInfo] = useState(false);
 
   async function send(e: FormEvent) {
     e.preventDefault();
     if (!body.trim()) return;
-    if (await run(() => post(path, { body }), 'Message sent')) {
+    const ok = await run(() => post(path, allowAskInfo ? { body, askInfo } : { body }),
+      askInfo ? 'Sent – the lead now waits for the customer' : 'Message sent');
+    if (ok) {
       setBody('');
+      setAskInfo(false);
       messages.reload();
+      onSent?.();
     }
   }
 
@@ -135,6 +161,12 @@ export function MessagesPanel({ path, title = 'Messages', hint }: { path: string
         </div>
         <form onSubmit={send} style={{ marginTop: 12 }} className="stack">
           <textarea className="input" rows={3} placeholder="Write a message…" value={body} onChange={(e) => setBody(e.target.value)} />
+          {allowAskInfo && (
+            <label className="check small">
+              <input type="checkbox" checked={askInfo} onChange={(e) => setAskInfo(e.target.checked)} />
+              <span>Ask the customer for more information (sends the “we need a little more information” e-mail and sets the lead to Waiting for customer)</span>
+            </label>
+          )}
           <div className="row between">
             <span className="small muted">{hint}</span>
             <button className="btn" disabled={busy || !body.trim()}>Send</button>
