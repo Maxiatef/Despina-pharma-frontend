@@ -6,7 +6,7 @@ import { post, patch, qs, uploadFile } from '@/lib/api';
 import { TASK_PRIORITIES } from '@/lib/types';
 import type { Doc, Message, Task, TimelineEntry } from '@/lib/types';
 import { useAuth, isStaff } from './auth';
-import { Badge, Empty, ErrorBox, Loading, approvalsChanged, fmtBytes, fmtDate, humanize, useAction, useApi } from './ui';
+import { Badge, Empty, ErrorBox, Loading, approvalsChanged, fmtBytes, fmtDate, humanize, useAction, useApi, Tip } from './ui';
 
 // ===================================================================== documents
 export function DocumentsPanel({ path, projectId, canUpload = true }: { path: string; projectId?: string; canUpload?: boolean }) {
@@ -32,7 +32,7 @@ export function DocumentsPanel({ path, projectId, canUpload = true }: { path: st
   return (
     <div className="card">
       <div className="card-head">
-        <h2>Documents</h2>
+        <h2>Documents<Tip>{staff ? 'Files for this project. “Visible to customer” files show in their workspace; “Internal only” files stay with the team. Uploading again makes a new version.' : 'Files shared with you by Despina, and files you uploaded. Click a file to download it.'}</Tip></h2>
         {canUpload && projectId && (
           <div className="row">
             {staff && (
@@ -147,7 +147,7 @@ export function MessagesPanel({ path, title = 'Messages', hint, allowAskInfo = f
 
   return (
     <div className="card">
-      <div className="card-head"><h2>{title}</h2></div>
+      <div className="card-head"><h2>{title}<Tip>{isStaff(me?.role) ? 'Your message is e-mailed to the customer and kept here. Internal notes are never sent.' : 'Write to the Despina team. You get an e-mail when they answer.'}</Tip></h2></div>
       <div className="card-body">
         <ErrorBox error={messages.error} onRetry={messages.reload} />
         <div className="thread">
@@ -220,7 +220,7 @@ export function TasksPanel({ inquiryId, projectId }: { inquiryId?: string; proje
 
   return (
     <div className="card">
-      <div className="card-head"><h2>Follow-up tasks</h2></div>
+      <div className="card-head"><h2>Follow-up tasks<Tip>To-dos for the team with a due date. Overdue ones are e-mailed to the person each morning.</Tip></h2></div>
       <div className="card-body">
         {tasks.data?.items.map((t) => {
           const overdue = !t.completedAt && t.dueAt && new Date(t.dueAt) < new Date();

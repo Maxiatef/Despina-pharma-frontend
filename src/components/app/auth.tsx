@@ -18,6 +18,7 @@ interface AuthCtx {
 const Ctx = createContext<AuthCtx>({ me: null, ready: false, refresh: async () => null, logout: async () => {} });
 export const useAuth = () => useContext(Ctx);
 export const isStaff = (role?: UserRole) => !!role && STAFF_ROLES.includes(role);
+export const MFA_SETUP_PATH = '/admin/account/';
 /** Where a user lands after login. */
 export const homeFor = (role: UserRole) => (role === 'customer' ? '/portal/' : '/admin/');
 
@@ -65,13 +66,16 @@ export function RequireAuth({ roles, children }: { roles?: UserRole[]; children:
   const router = useRouter();
   const pathname = usePathname();
   const allowed = !!me && (!roles || roles.includes(me.role));
+  // Team accounts must turn on two-factor login first: only the account page works until then.
+  const mfaBlocked = !!me?.mfaPending && !pathname.startsWith(MFA_SETUP_PATH);
 
   useEffect(() => {
     if (!ready) return;
     if (!me) router.replace(`/login/?next=${encodeURIComponent(pathname)}`);
     else if (!allowed) router.replace(homeFor(me.role));
-  }, [ready, me, allowed, router, pathname]);
+    else if (mfaBlocked) router.replace(`${MFA_SETUP_PATH}?setup-mfa=1`);
+  }, [ready, me, allowed, mfaBlocked, router, pathname]);
 
-  if (!ready || !allowed) return <Loading />;
+  if (!ready || !allowed || mfaBlocked) return <Loading />;
   return <>{children}</>;
 }

@@ -26,7 +26,12 @@ function Companies() {
 
   return (
     <>
-      <PageHead eyebrow="Customers" title="Companies"><button className="btn" onClick={() => setOpen(true)}>New company</button></PageHead>
+      <PageHead eyebrow="Customers" title="Companies" sub="Brands and businesses Despina works with."
+        help={<ul>
+          <li>A company is created automatically when someone sends a website form with a company name.</li>
+          <li>Open a company to see its people, inquiries and projects, and to give people a login to the customer workspace.</li>
+          <li>The <b>main contact</b> of a company can invite and remove colleagues themselves.</li>
+        </ul>}><button className="btn" onClick={() => setOpen(true)}>New company</button></PageHead>
       <div className="card">
         <form className="toolbar" style={{ padding: '14px 16px 0' }} onSubmit={(e) => { e.preventDefault(); set({ q }); }}>
           <input className="input grow" type="search" placeholder="Search name or website…" value={q} onChange={(e) => setQ(e.target.value)} />

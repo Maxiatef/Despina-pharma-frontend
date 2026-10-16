@@ -27,6 +27,7 @@ const ALIASES: Record<string, string[]> = {
   '/portal/projects/': ['my-projects', 'portal/my-projects', 'customer/projects'],
   '/admin/inquiries/': ['admin/leads', 'admin/inquiry', 'admin/enquiries', 'leads', 'inquiries', 'enquiries', 'admin/requests'],
   '/admin/tasks/': ['admin/task', 'admin/follow-ups', 'admin/followups', 'admin/todo', 'tasks', 'follow-ups', 'followups'],
+  '/admin/waiting/': ['admin/waiting-list', 'admin/reminders', 'admin/waiting-on-us'],
   '/admin/projects/': ['admin/project'],
   '/admin/companies/': ['admin/company', 'admin/clients', 'admin/customers', 'admin/brands'],
   '/admin/contacts/': ['admin/contact', 'admin/people'],

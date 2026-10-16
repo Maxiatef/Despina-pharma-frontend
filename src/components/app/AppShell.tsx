@@ -23,6 +23,7 @@ function staffNav(newLeads?: number): NavGroup[] {
       items: [
         { href: '/admin/inquiries/', label: 'Inquiries', count: newLeads },
         { href: '/admin/tasks/', label: 'Tasks' },
+        { href: '/admin/waiting/', label: 'Waiting list' },
       ],
     },
     {
@@ -114,9 +115,13 @@ function Frame({ nav, children }: { nav: NavGroup[]; children: ReactNode }) {
   );
 }
 
+const MFA_PENDING_NAV: NavGroup[] = [{ group: 'You', items: [{ href: '/admin/account/', label: 'My account' }] }];
+
 function StaffFrame({ children }: { children: ReactNode }) {
-  const summary = useApi<{ new: number }>('/inquiries/summary');
-  return <Frame nav={staffNav(summary.data?.new)}>{children}</Frame>;
+  const { me } = useAuth();
+  // One tree in both cases, so the page (e.g. the new backup codes) stays when two-factor login turns on.
+  const summary = useApi<{ new: number }>(me?.mfaPending ? null : '/inquiries/summary');
+  return <Frame nav={me?.mfaPending ? MFA_PENDING_NAV : staffNav(summary.data?.new)}>{children}</Frame>;
 }
 
 /** Staff dashboard frame (/admin/*). */

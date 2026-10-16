@@ -31,7 +31,13 @@ function Inquiries() {
 
   return (
     <>
-      <PageHead eyebrow="Leads" title="Inquiries" sub="Every submission from the website forms.">
+      <PageHead eyebrow="Leads" title="Inquiries" sub="Every submission from the website forms."
+        help={<ul>
+          <li>Every website form lands here with a reference number (DP-INQ-…). The person gets a confirmation e-mail and a follow-up task is created.</li>
+          <li><b>Status</b> shows how far it is: New → Assigned → Waiting for customer → Qualified → Quoted → Won / Lost.</li>
+          <li><b>Held as spam</b> – forms that look like spam are put aside without e-mails. Open one and release it if it is real.</li>
+          <li>Open a lead to reply, ask for more information, assign it or turn it into a project.</li>
+        </ul>}>
         <div className="tabs" style={{ margin: 0, border: 0 }}>
           <button className={view === 'table' ? 'active' : ''} onClick={() => set({ view: undefined })}>Table</button>
           <button className={view === 'board' ? 'active' : ''} onClick={() => set({ view: 'board' })}>Board</button>

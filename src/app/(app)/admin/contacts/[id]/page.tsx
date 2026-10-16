@@ -45,6 +45,12 @@ export default function ContactPage({ params }: { params: Promise<{ id: string }
           <button className="btn small secondary" disabled={busy} onClick={async () => { if (await run(() => post(`/contacts/${id}/clear-email-status`), 'E-mails to this contact are allowed again')) c.reload(); }}>Clear status</button>
         </div>
       )}
+      {d.remindersOffAt && (
+        <div className="alert warn row between" style={{ marginBottom: 16 }}>
+          <span>This contact turned off reminder e-mails on {fmtDate(d.remindersOffAt)}. Replies and project updates still go out.</span>
+          <button className="btn small secondary" disabled={busy} onClick={async () => { if (confirm('Turn reminder e-mails back on? Only do this when the customer asked for it.') && await run(() => post(`/contacts/${id}/reminders-on`), 'Reminders are back on')) c.reload(); }}>Turn reminders back on</button>
+        </div>
+      )}
       <div className="split">
         <div className="stack">
           <div className="card pad">

@@ -27,6 +27,8 @@ export interface Me {
   contactId: string | null;
   sessionId: string;
   companyIds: string[];
+  /** Staff account that must turn on two-factor login before anything else works. */
+  mfaPending?: boolean;
 }
 
 export interface Paged<T> {
@@ -48,6 +50,8 @@ export interface Contact extends Base {
   jobTitle: string | null; country: string | null; company?: Company | null;
   /** "bounced" / "complained" from the Resend webhook – not e-mailed until cleared. */
   emailStatus?: string | null; emailStatusAt?: string | null; emailStatusDetail?: string | null;
+  /** The contact turned off reminder e-mails (link in each reminder). */
+  remindersOffAt?: string | null;
 }
 export interface User extends Base { email: string; role: UserRole; isActive: boolean; mfaEnabled: boolean; lastLoginAt: string | null; contactId: string | null }
 
@@ -124,6 +128,8 @@ export interface ProjectStage extends Base {
 export interface Sample extends Base { projectProductId: string; inquiryId: string | null; title: string; status: (typeof SAMPLE_STATUSES)[number] }
 export interface ProjectProduct extends Base {
   projectId: string; catalogItemId: string | null; serviceId: string | null; name: string; targetQuantity: number | null; notes: string | null; samples?: Sample[];
+  /** Internal target (staff only – not sent to customers) and the date promised to the customer (YYYY-MM-DD). */
+  targetDate?: string | null; promisedDate: string | null;
   /** Product-line brief (format, path, fill size, ingredients, packaging, market…); notSure = fields not decided yet. */
   details?: { [field: string]: string | string[] | undefined; notSure?: string[] };
   /** This product line's own stage track (stages per product line). */
@@ -150,6 +156,8 @@ export interface QuoteDetail extends Quote { versions: QuoteVersion[] }
 export interface ProjectRow extends Base {
   code: string; companyId: string; name: string; status: (typeof PROJECT_STATUSES)[number]; stageTemplateId: string | null;
   currentStageId: string | null; ownerId: string | null; sourceInquiryId: string | null; companyName?: string; currentStage?: string | null;
+  /** Internal target (staff only – not sent to customers) and the date promised to the customer (YYYY-MM-DD). */
+  targetDate?: string | null; promisedDate: string | null;
 }
 export interface ProjectDetail extends ProjectRow {
   company: Company | null; owner: { id: string; email: string } | null; stages: ProjectStage[]; products: ProjectProduct[]; quotes: Quote[];

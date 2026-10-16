@@ -52,6 +52,12 @@ export default function InquiryPage({ params }: { params: Promise<{ id: string }
         eyebrow={d.inquiryType ? `${humanize(d.formType)} · ${INQUIRY_TYPES[d.inquiryType] ?? d.inquiryType}` : humanize(d.formType)}
         title={<span className="row">{d.referenceNo} <Badge value={d.status} /></span>}
         sub={<>Received {fmtDate(d.createdAt, true)}{d.sourcePage && <> from <a href={d.sourcePage} target="_blank" rel="noreferrer">{d.sourcePage.split('?')[0]}</a></>}</>}
+        help={<ul>
+          <li><b>Reply</b> – your message is e-mailed to the person and kept here. Tick “Ask for more information” to move the lead to <i>Waiting for customer</i>; they get friendly reminders until they answer.</li>
+          <li><b>Notes</b> are internal – never e-mailed.</li>
+          <li><b>Assign</b> it to the person who will follow up; their open tasks move with it.</li>
+          <li><b>Convert to project</b> when the customer goes ahead: the products and files move to a new project workspace.</li>
+        </ul>}
       >
         {me?.role === 'admin' && <Link className="btn secondary" href={`/admin/audit/?inquiryId=${d.id}`}>Audit history</Link>}
         {d.project ? (

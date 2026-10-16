@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { Badge, Empty, ErrorBox, Loading, PageHead, fmtDate, useApi } from '@/components/app/ui';
+import { Badge, Empty, ErrorBox, Loading, PageHead, Tip, fmtDate, useApi } from '@/components/app/ui';
 
 interface Overview {
-  projects: { id: string; code: string; name: string; status: string; updatedAt: string; currentStage: string | null }[];
+  projects: { id: string; code: string; name: string; status: string; updatedAt: string; currentStage: string | null; promisedDate: string | null }[];
   waitingForYou: {
     quotes: { id: string; projectId: string; quoteNo: string; status: string; updatedAt: string }[];
     samples: { id: string; title: string; status: string; project_id: string; product_name: string }[];
@@ -19,7 +19,12 @@ export default function PortalHome() {
 
   return (
     <>
-      <PageHead eyebrow="Your workspace" title={`Welcome${name ? `, ${name}` : ''}.`} sub="Follow your products from first brief to dispatch." />
+      <PageHead eyebrow="Your workspace" title={`Welcome${name ? `, ${name}` : ''}.`} sub="Follow your products from first brief to dispatch."
+        help={<ul>
+          <li><b>Your projects</b> – open one to see its stage, products, samples, quotes, documents and messages.</li>
+          <li><b>Waiting for you</b> – things the Despina team needs from you, like a quote to answer or a sample to rate.</li>
+          <li>Questions? Write in the project’s <b>Messages</b> – you get an e-mail when the team answers.</li>
+        </ul>} />
       <ErrorBox error={o.error} onRetry={o.reload} />
       {o.loading && !o.data ? <Loading /> : o.data && (
         <div className="split">
@@ -29,7 +34,7 @@ export default function PortalHome() {
               {o.data.projects.map((p) => (
                 <Link key={p.id} href={`/portal/projects/${p.id}/`} className="board-card" style={{ marginBottom: 0 }}>
                   <div className="row between"><b style={{ fontWeight: 500 }}>{p.name}</b><Badge value={p.status} /></div>
-                  <div className="small muted">{p.code} · {p.currentStage ? `Now: ${p.currentStage}` : 'Getting started'} · updated {fmtDate(p.updatedAt)}</div>
+                  <div className="small muted">{p.code} · {p.currentStage ? `Now: ${p.currentStage}` : 'Getting started'}{p.promisedDate ? ` · expected ${fmtDate(`${p.promisedDate}T12:00:00`)}` : ''} · updated {fmtDate(p.updatedAt)}</div>
                 </Link>
               ))}
               {!o.data.projects.length && (
@@ -42,7 +47,7 @@ export default function PortalHome() {
             </div>
           </div>
           <div className="card pad">
-            <h3>Waiting for you {waiting > 0 && <span className="badge warn">{waiting}</span>}</h3>
+            <h3>Waiting for you<Tip>Quotes to answer and samples to rate. We send a friendly reminder if something waits for a few days.</Tip> {waiting > 0 && <span className="badge warn">{waiting}</span>}</h3>
             <div style={{ marginTop: 10 }}>
               {o.data.waitingForYou.quotes.map((q) => (
                 <Link key={q.id} href={`/portal/projects/${q.projectId}/`} className="board-card">Quote <span className="mono">{q.quoteNo}</span> is ready to review</Link>

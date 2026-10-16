@@ -146,16 +146,40 @@ export function fmtBytes(n: string | number) {
   return b > 1048576 ? `${(b / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(b / 1024))} KB`;
 }
 
-export function PageHead({ eyebrow, title, sub, children }: { eyebrow?: string; title: ReactNode; sub?: ReactNode; children?: ReactNode }) {
+export function PageHead({ eyebrow, title, sub, help, children }: { eyebrow?: string; title: ReactNode; sub?: ReactNode; help?: ReactNode; children?: ReactNode }) {
   return (
-    <div className="page-head">
-      <div>
-        {eyebrow && <span className="eyebrow">{eyebrow}</span>}
-        <h1>{title}</h1>
-        {sub && <p className="sub">{sub}</p>}
+    <>
+      <div className="page-head">
+        <div>
+          {eyebrow && <span className="eyebrow">{eyebrow}</span>}
+          <h1>{title}</h1>
+          {sub && <p className="sub">{sub}</p>}
+        </div>
+        {children && <div className="row">{children}</div>}
       </div>
-      {children && <div className="row">{children}</div>}
-    </div>
+      {help && <PageHelp>{help}</PageHelp>}
+    </>
+  );
+}
+
+// ===================================================================== help text
+/** "How this page works" – a short guide under the page title, closed until opened. */
+export function PageHelp({ children, title = 'How this page works' }: { children: ReactNode; title?: string }) {
+  return (
+    <details className="page-help">
+      <summary>{title}</summary>
+      <div className="page-help-body">{children}</div>
+    </details>
+  );
+}
+
+/** Small "?" next to a label; the explanation shows on hover, keyboard focus or tap. */
+export function Tip({ children, label = 'What is this?' }: { children: ReactNode; label?: string }) {
+  return (
+    <span className="tip" tabIndex={0} role="button" aria-label={label}>
+      ?
+      <span className="tip-text" role="tooltip">{children}</span>
+    </span>
   );
 }
 

@@ -11,7 +11,7 @@ import type {
 import type { Feedback, FeedbackDetails, QuoteTerms } from '@/lib/types';
 import { isStaff, useAuth } from './auth';
 import { DocumentsPanel, MessagesPanel, TasksPanel } from './panels';
-import { Badge, Empty, ErrorBox, Kv, Loading, Modal, PageHead, approvalsChanged, fmtDate, fmtMoney, humanize, useAction, useApi, useApprovalsChanged } from './ui';
+import { Badge, Empty, ErrorBox, Kv, Loading, Modal, PageHead, approvalsChanged, fmtDate, fmtMoney, humanize, useAction, useApi, useApprovalsChanged, Tip } from './ui';
 
 // ===================================================================== stages
 function Stages({ project, reload, staff }: { project: ProjectDetail; reload: () => void; staff: boolean }) {
@@ -23,7 +23,7 @@ function Stages({ project, reload, staff }: { project: ProjectDetail; reload: ()
   return (
     <div className="card pad">
       <div className="row between">
-        <h3>Stages</h3>
+        <h3>Stages<Tip>{staff ? 'The steps of this project. Complete the current one to start the next. The customer sees the same steps.' : 'The steps of your project, from inquiry to dispatch. The highlighted one is where your project is now.'}</Tip></h3>
         {current && <span className="small muted">Current: <b style={{ fontWeight: 500 }}>{current.name}</b>{current.startedAt && ` · since ${fmtDate(current.startedAt)}`}</span>}
       </div>
       <div className="stages" style={{ marginTop: 12 }}>
@@ -244,6 +244,64 @@ function ProductDetails({ product, reload }: { product: ProjectProduct; reload: 
 }
 
 // ===================================================================== project status (reason for on hold / cancelled)
+// ===================================================================== dates
+const today = () => new Date().toISOString().slice(0, 10);
+/** A YYYY-MM-DD date shown in the reader's format (no time-zone shift). */
+const fmtDay = (d: string | null | undefined) => (d ? fmtDate(`${d}T12:00:00`) : '—');
+
+/**
+ * Internal target date (staff only) and the date promised to the customer. Customers see only the promised date.
+ * A changed promised date is written on the project timeline, with the reason.
+ */
+function Dates({ path, target, promised, staff, done, reload, compact }: {
+  path: string; target?: string | null; promised: string | null; staff: boolean; done: boolean; reload: () => void; compact?: boolean;
+}) {
+  const { busy, run } = useAction();
+  const [editing, setEditing] = useState(false);
+  const [t, setT] = useState(target ?? '');
+  const [pr, setPr] = useState(promised ?? '');
+  const [reason, setReason] = useState('');
+  const late = !done && !!promised && promised < today();
+  const targetLate = !done && !!target && target < today();
+  const conflict = !!target && !!promised && target > promised;
+  if (!staff) {
+    if (!promised) return compact ? null : <p className="small muted">Expected date: to be confirmed</p>;
+    return <p className="small">Expected {compact ? '' : 'date'}: <b>{fmtDay(promised)}</b></p>;
+  }
+  if (!editing) {
+    const edit = <button className="btn small ghost" onClick={() => { setT(target ?? ''); setPr(promised ?? ''); setReason(''); setEditing(true); }}>Edit dates</button>;
+    const parts = [
+      <span key="t">Target (internal): <b>{fmtDay(target)}</b>{targetLate && <span className="badge warn" style={{ marginLeft: 6 }}>passed</span>}</span>,
+      <span key="p">Promised to customer: <b>{fmtDay(promised)}</b>{late && <span className="badge bad" style={{ marginLeft: 6 }}>passed</span>}</span>,
+      conflict ? <span key="c" className="badge warn">Target is after the promised date</span> : null,
+    ];
+    if (compact) return <div className="row small" style={{ gap: 10, flexWrap: 'wrap' }}>{parts}{edit}</div>;
+    return (
+      <div className="small">
+        {parts.filter(Boolean).map((x, i) => <div key={i} style={{ marginBottom: 6 }}>{x}</div>)}
+        {edit}
+      </div>
+    );
+  }
+  const promisedChanged = (pr || null) !== (promised ?? null);
+  return (
+    <form className="stack" style={{ marginTop: 6 }} onSubmit={async (e) => {
+      e.preventDefault();
+      if (await run(() => patch(path, { targetDate: t || null, promisedDate: pr || null, dateReason: reason || undefined }), 'Dates saved')) { setEditing(false); reload(); }
+    }}>
+      <div className="form-grid">
+        <label className="field"><span>Target date (internal)</span><input type="date" value={t} onChange={(e) => setT(e.target.value)} /><small className="hint">Our own goal. Customers never see it.</small></label>
+        <label className="field"><span>Promised to the customer</span><input type="date" value={pr} onChange={(e) => setPr(e.target.value)} /><small className="hint">Shown in the customer’s workspace.</small></label>
+        {promisedChanged && promised && (
+          <label className="field full"><span>Why did the promised date change? (shown on the timeline)</span><input value={reason} maxLength={500} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Packaging supplier delayed the bottles" /></label>
+        )}
+      </div>
+      {!!t && !!pr && t > pr && <div className="alert warn">The internal target is later than the date promised to the customer.</div>}
+      <div className="row"><button className="btn small" disabled={busy}>Save dates</button><button type="button" className="btn small ghost" onClick={() => setEditing(false)}>Cancel</button></div>
+    </form>
+  );
+}
+
 function ProjectStatus({ project, reload }: { project: ProjectDetail; reload: () => void }) {
   const { busy, run } = useAction();
   const [pending, setPending] = useState<string | null>(null);
@@ -467,7 +525,7 @@ function Products({ project, staff, reload }: { project: ProjectDetail; staff: b
   const [sampleTitle, setSampleTitle] = useState<Record<string, string>>({});
   return (
     <div className="card">
-      <div className="card-head"><h2>Products</h2><AddProduct projectId={project.id} onAdded={reload} /></div>
+      <div className="card-head"><h2>Products<Tip>{staff ? 'Each product line in this project, with its own details, stages, briefs and samples.' : 'The products in this project. Open the details to tell us what you need; rate samples here when they arrive.'}</Tip></h2><AddProduct projectId={project.id} onAdded={reload} /></div>
       <div className="card-body stack">
         {project.products.map((p) => (
           <div key={p.id} className="card pad">
@@ -475,6 +533,10 @@ function Products({ project, staff, reload }: { project: ProjectDetail; staff: b
               <div>
                 <h3>{p.name}</h3>
                 <div className="small muted">{p.targetQuantity ? `Target ${p.targetQuantity.toLocaleString()} units` : 'Quantity to be confirmed'}{p.notes ? ` · ${p.notes}` : ''}</div>
+                <div style={{ marginTop: 6 }}>
+                  <Dates compact path={`/project-products/${p.id}`} target={p.targetDate} promised={p.promisedDate} staff={staff}
+                    done={!!p.stageSummary && p.stageSummary.done === p.stageSummary.total} reload={reload} />
+                </div>
               </div>
               <button className="btn small ghost" disabled={busy} onClick={async () => {
                 if (confirm(`Remove “${p.name}” from this project?`) && await run(() => del(`/project-products/${p.id}`), 'Product removed')) reload();
@@ -666,7 +728,7 @@ function Quotes({ project, staff, reload }: { project: ProjectDetail; staff: boo
   const [creating, setCreating] = useState(false);
   return (
     <div className="card">
-      <div className="card-head"><h2>Quotes</h2>{staff && <button className="btn small" onClick={() => setCreating((c) => !c)}>{creating ? 'Cancel' : 'New quote'}</button>}</div>
+      <div className="card-head"><h2>Quotes<Tip>{staff ? 'A quote is a draft until you send it. The customer then accepts, asks for changes or declines. Each change makes a new version.' : 'Price offers from Despina. Open one to accept it, ask for changes or decline.'}</Tip></h2>{staff && <button className="btn small" onClick={() => setCreating((c) => !c)}>{creating ? 'Cancel' : 'New quote'}</button>}</div>
       <div className="card-body">
         {creating && (
           <QuoteEditor busy={busy} initial={project.products.map((p) => ({ description: p.name, quantity: String(p.targetQuantity ?? 1), unitPrice: '0' }))}
@@ -685,7 +747,7 @@ function Approvals({ projectId }: { projectId: string }) {
   useApprovalsChanged(a.reload);
   return (
     <div className="card pad">
-      <h3>Approvals</h3>
+      <h3>Approvals<Tip>A record of what was approved (sample, document, quote or brief), by whom and when – fixed to that exact version.</Tip></h3>
       {a.data?.map((x) => (
         <div key={x.id} className="small" style={{ padding: '8px 0', borderBottom: '1px solid var(--line-2)' }}>
           <div className="row between"><Badge value={x.targetType} tone="ok" /><span className="muted">{fmtDate(x.approvedAt, true)}</span></div>
@@ -702,7 +764,7 @@ function ProjectTimeline({ projectId }: { projectId: string }) {
   const t = useApi<StatusEventLike[]>(`/projects/${projectId}/timeline`);
   return (
     <div className="card pad">
-      <h3>History</h3>
+      <h3>History<Tip>Everything that happened in this project, newest first.</Tip></h3>
       <ul className="timeline" style={{ marginTop: 12 }}>
         {t.data?.slice().reverse().map((e) => <li key={e.id}><div className="when">{fmtDate(e.createdAt, true)}</div>{e.note ?? (e.toStatus ? `Status → ${humanize(e.toStatus)}` : '')}</li>)}
       </ul>
@@ -729,7 +791,24 @@ export function ProjectWorkspace({ id, backHref }: { id: string; backHref: strin
   return (
     <>
       <p className="small"><Link href={backHref}>← Projects</Link></p>
-      <PageHead eyebrow={project.code} title={project.name} sub={<>{project.company?.name}{project.owner && ` · Despina contact: ${project.owner.email}`}</>}>
+      <PageHead eyebrow={project.code} title={project.name} sub={<>{project.company?.name}{project.owner && ` · Despina contact: ${project.owner.email}`}</>}
+        help={staff ? (
+          <ul>
+            <li><b>Stages</b> – complete the current stage to move on. Some stages (e.g. Quality Release) need a certain role.</li>
+            <li><b>Products</b> – each product line has its own details, stages, briefs and samples.</li>
+            <li><b>Quotes</b> – create, then “Send” so the customer can accept, ask for changes or decline.</li>
+            <li><b>Documents</b> – choose “Visible to customer” or “Internal only” when you upload.</li>
+            <li><b>Dates</b> – the target date is for us only; the promised date is shown to the customer.</li>
+          </ul>
+        ) : (
+          <ul>
+            <li><b>Stages</b> show where your project is now.</li>
+            <li><b>Products</b> – details, samples and feedback for each product. When a sample arrives, rate it here.</li>
+            <li><b>Quotes</b> – review a quote and accept it, ask for changes or decline.</li>
+            <li><b>Documents</b> – files from Despina to download; you can upload files too.</li>
+            <li><b>Messages</b> – write to the Despina team; you get an e-mail when they answer.</li>
+          </ul>
+        )}>
         {staff ? (
           <ProjectStatus project={project} reload={p.reload} />
         ) : <Badge value={project.status} />}
@@ -748,7 +827,7 @@ export function ProjectWorkspace({ id, backHref }: { id: string; backHref: strin
         <div className="stack">
           {staff && (
             <div className="card pad">
-              <h3>Project owner</h3>
+              <h3>Project owner<Tip>The Despina person responsible. They get the customer’s messages and the daily “waiting on you” list.</Tip></h3>
               <select className="input" style={{ marginTop: 10 }} value={project.ownerId ?? ''} disabled={busy}
                 onChange={async (e) => { if (await run(() => patch(`/projects/${id}`, { ownerId: e.target.value }), 'Owner updated')) p.reload(); }}>
                 {staffList.data?.map((u) => <option key={u.id} value={u.id}>{u.email}</option>)}
@@ -758,6 +837,13 @@ export function ProjectWorkspace({ id, backHref }: { id: string; backHref: strin
               </div>
             </div>
           )}
+          <div className="card pad">
+            <h3>Dates<Tip>{staff ? 'Target = our own goal (customers never see it). Promised = the date given to the customer; changing it asks for a reason that shows in the history.' : 'The date Despina expects your project to be ready. If it changes, the reason shows in the history.'}</Tip></h3>
+            <div style={{ marginTop: 10 }}>
+              <Dates path={`/projects/${id}`} target={project.targetDate} promised={project.promisedDate} staff={staff}
+                done={project.status === 'completed' || project.status === 'cancelled'} reload={p.reload} />
+            </div>
+          </div>
           <Approvals projectId={id} />
           {staff && <TasksPanel projectId={id} />}
           <ProjectTimeline key={historyKey} projectId={id} />

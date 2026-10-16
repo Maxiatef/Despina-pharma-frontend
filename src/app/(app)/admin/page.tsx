@@ -32,7 +32,16 @@ export default function DashboardPage() {
 
   return (
     <>
-      <PageHead eyebrow="Dashboard" title={`Hello${me ? `, ${me.email.split('@')[0]}` : ''}.`} sub="Leads, your tasks and projects at a glance." />
+      <PageHead eyebrow="Dashboard" title={`Hello${me ? `, ${me.email.split('@')[0]}` : ''}.`} sub="Leads, your tasks and projects at a glance."
+        help={<>
+          <p>Your starting point each day:</p>
+          <ul>
+            <li><b>Inquiries</b> – new requests from the website. Open one, reply, assign it, and convert it to a project when the customer is serious.</li>
+            <li><b>Tasks</b> – follow-ups with a due date. Overdue ones are e-mailed to you every morning.</li>
+            <li><b>Waiting list</b> – what customers are waiting for from us, and what we are waiting for from them.</li>
+            <li><b>Projects</b> – everything for a customer after the inquiry: products, samples, quotes, documents, messages.</li>
+          </ul>
+        </>} />
       <ErrorBox error={o.error} onRetry={o.reload} />
       {o.loading && !o.data ? <Loading /> : o.data && (
         <>

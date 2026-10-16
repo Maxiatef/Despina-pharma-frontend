@@ -98,6 +98,21 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .muted { color: var(--muted); }
 .small { font-size: .82rem; }
 .mono { font-family: ui-monospace, Consolas, monospace; font-size: .84rem; }
+.page-help { margin: -8px 0 18px; background: var(--info-bg); border: 1px solid #c4ecf3; border-radius: var(--radius); font-size: .86rem; color: var(--ink-2); }
+.page-help summary { cursor: pointer; padding: 9px 14px; font-weight: 500; color: var(--navy); list-style: none; }
+.page-help summary::-webkit-details-marker { display: none; }
+.page-help summary::before { content: '?'; display: inline-grid; place-items: center; width: 18px; height: 18px; margin-right: 8px; border-radius: 50%; background: var(--teal); color: #fff; font-size: .72rem; font-weight: 600; }
+.page-help[open] summary { border-bottom: 1px solid #c4ecf3; }
+.page-help-body { padding: 10px 16px 12px; line-height: 1.6; }
+.page-help-body p { margin: 0 0 8px; }
+.page-help-body ul, .page-help-body ol { margin: 0 0 8px; padding-left: 20px; }
+.page-help-body li { margin-bottom: 4px; }
+.page-help-body > :last-child { margin-bottom: 0; }
+.tip { position: relative; display: inline-grid; place-items: center; width: 16px; height: 16px; margin-left: 6px; border-radius: 50%; background: var(--line-2); border: 1px solid var(--line); color: var(--muted); font-family: inherit; font-size: .68rem; font-weight: 600; line-height: 1; cursor: help; vertical-align: middle; letter-spacing: 0; text-transform: none; }
+.tip:hover, .tip:focus { background: var(--teal); border-color: var(--teal); color: #fff; outline: none; }
+.tip-text { position: absolute; z-index: 50; left: 50%; top: calc(100% + 8px); transform: translateX(-50%); width: max-content; max-width: min(280px, 80vw); padding: 9px 12px; border-radius: 8px; background: var(--navy); color: #fff; font-family: inherit; font-size: .8rem; font-weight: 400; line-height: 1.5; white-space: normal; text-align: left; box-shadow: var(--shadow); opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .12s; }
+.tip:hover .tip-text, .tip:focus .tip-text { opacity: 1; visibility: visible; }
+.backup-codes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 16px; padding: 12px 14px; border: 1px dashed var(--line); border-radius: 8px; font-size: .95rem; letter-spacing: .04em; }
 .pre { white-space: pre-wrap; }
 hr { border: 0; border-top: 1px solid var(--line-2); margin: 16px 0; }
 

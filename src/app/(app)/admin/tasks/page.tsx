@@ -20,7 +20,12 @@ function Tasks() {
 
   return (
     <>
-      <PageHead eyebrow="Leads" title="Tasks" sub="Follow-ups on leads and projects. Overdue tasks are emailed every morning.">
+      <PageHead eyebrow="Leads" title="Tasks" sub="Follow-ups on leads and projects. Overdue tasks are emailed every morning."
+        help={<ul>
+          <li>Each new website request makes a follow-up task, due within the response time set in Lead rules.</li>
+          <li>Tick a task when it is done. Change the person with the name list.</li>
+          <li>Every morning each person gets one e-mail with their overdue tasks.</li>
+        </ul>}>
         <button className="btn secondary" disabled={busy} onClick={() => run(() => post<{ sent: number }>('/tasks/send-overdue-digest'), 'Overdue reminders queued')}>Send overdue reminders now</button>
       </PageHead>
       <div className="card">

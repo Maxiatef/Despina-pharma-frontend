@@ -53,7 +53,19 @@ function List({ base }: { base: '/admin/projects/' | '/portal/projects/' }) {
   const list = useApi<Paged<ProjectRow>>(`/projects${qs({ q: values.q, status: values.status, page, pageSize: 25 })}`);
   return (
     <>
-      <PageHead eyebrow={staff ? 'Customers' : 'Workspace'} title="Projects" sub={staff ? 'All customer projects.' : 'Your projects with Despina Pharma.'}>
+      <PageHead eyebrow={staff ? 'Customers' : 'Workspace'} title="Projects" sub={staff ? 'All customer projects.' : 'Your projects with Despina Pharma.'}
+        help={staff ? (
+          <ul>
+            <li>A project is a customer’s workspace: products, stages, samples, quotes, documents and messages in one place.</li>
+            <li>Make one from an inquiry (“Convert to project”) or with “New project”.</li>
+            <li>The customer sees the same project in their workspace – except internal notes, internal documents and the internal target date.</li>
+          </ul>
+        ) : (
+          <ul>
+            <li>Each project is one development with Despina – it can hold several products.</li>
+            <li>Open a project to follow its stages, give sample feedback, answer quotes, download documents and message the team.</li>
+          </ul>
+        )}>
         {staff && <NewProject onCreated={(id) => router.push(`/admin/projects/${id}/`)} />}
       </PageHead>
       <div className="card">

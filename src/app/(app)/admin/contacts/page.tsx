@@ -27,7 +27,11 @@ function Contacts() {
 
   return (
     <>
-      <PageHead eyebrow="Customers" title="Contacts" sub="Everyone who contacted Despina. A contact does not need a login."><button className="btn" onClick={() => setOpen(true)}>New contact</button></PageHead>
+      <PageHead eyebrow="Customers" title="Contacts" sub="Everyone who contacted Despina. A contact does not need a login."
+        help={<ul>
+          <li>Every website form adds or updates a contact (matched by e-mail).</li>
+          <li>Open a contact for their inquiries, consents, e-mail status and privacy requests (download or delete their data – admins only).</li>
+        </ul>}><button className="btn" onClick={() => setOpen(true)}>New contact</button></PageHead>
       <div className="card">
         <form className="toolbar" style={{ padding: '14px 16px 0' }} onSubmit={(e) => { e.preventDefault(); set({ q }); }}>
           <input className="input grow" type="search" placeholder="Search name or email…" value={q} onChange={(e) => setQ(e.target.value)} />
