@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import Link from 'next/link';
-import { del, patch, post, qs } from '@/lib/api';
+import { del, patch, post, qs, uploadFile } from '@/lib/api';
 import { PROJECT_STATUSES, SAMPLE_STATUSES } from '@/lib/types';
 import type {
   Approval, Brief, CatalogItem, Paged, ProjectDetail, ProjectProduct, QuoteDetail, SampleDetail, StageTemplate, StatusEventLike,
 } from './workspace-types';
+import type { Feedback, FeedbackDetails, QuoteTerms } from '@/lib/types';
 import { isStaff, useAuth } from './auth';
 import { DocumentsPanel, MessagesPanel, TasksPanel } from './panels';
 import { Badge, Empty, ErrorBox, Kv, Loading, Modal, PageHead, approvalsChanged, fmtDate, fmtMoney, humanize, useAction, useApi, useApprovalsChanged } from './ui';
@@ -147,6 +148,127 @@ function AddProduct({ projectId, onAdded }: { projectId: string; onAdded: () => 
   );
 }
 
+// ===================================================================== product-line details (plan §7)
+const PATHS: [string, string][] = [
+  ['custom_formulation', 'Custom formulation'], ['private_label', 'Private label (stock formula)'], ['semi_custom', 'Semi-custom'],
+  ['formula_transfer', 'Formula transfer'], ['packaging_only', 'Packaging / filling only'],
+];
+type DetailField = { key: string; label: string; long?: boolean; hint?: string };
+const DETAIL_GROUPS: [string, DetailField[]][] = [
+  ['Product', [
+    { key: 'category', label: 'Category', hint: 'e.g. Skincare' }, { key: 'format', label: 'Format', hint: 'e.g. Lotion, serum, shampoo' },
+    { key: 'path', label: 'Development path' }, { key: 'quantity', label: 'Desired quantity', hint: 'e.g. 5,000 units first run' },
+    { key: 'fillSize', label: 'Fill size', hint: 'e.g. 50 ml' },
+  ]],
+  ['Formula', [
+    { key: 'includeIngredients', label: 'Ingredients wanted', long: true }, { key: 'excludeIngredients', label: 'Ingredients to avoid', long: true },
+    { key: 'texture', label: 'Texture' }, { key: 'fragrance', label: 'Fragrance' }, { key: 'color', label: 'Colour' }, { key: 'finish', label: 'Finish' },
+  ]],
+  ['Packaging', [{ key: 'packaging', label: 'Packaging', long: true }, { key: 'artwork', label: 'Artwork / labels', long: true }]],
+  ['Market', [
+    { key: 'market', label: 'Market / countries' }, { key: 'channels', label: 'Sales channels', hint: 'e.g. Amazon, salons, retail' },
+    { key: 'launchDate', label: 'Target launch', hint: 'e.g. Spring 2027' }, { key: 'budget', label: 'Budget (optional)' },
+    { key: 'references', label: 'Reference products and links', long: true },
+  ]],
+];
+const ALL_FIELDS = DETAIL_GROUPS.flatMap(([, f]) => f);
+const pathLabel = (v?: string) => PATHS.find(([k]) => k === v)?.[1] ?? v;
+
+function ProductDetails({ product, reload }: { product: ProjectProduct; reload: () => void }) {
+  const { busy, run } = useAction();
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState<Record<string, string>>({});
+  const [notSure, setNotSure] = useState<string[]>([]);
+  const d = product.details ?? {};
+  const unsure = d.notSure ?? [];
+  const filled = ALL_FIELDS.filter((f) => typeof d[f.key] === 'string' && d[f.key]);
+  const edit = () => {
+    setForm(Object.fromEntries(ALL_FIELDS.map((f) => [f.key, typeof d[f.key] === 'string' ? (d[f.key] as string) : ''])));
+    setNotSure(unsure);
+    setOpen(true);
+  };
+  const save = async (e: FormEvent) => {
+    e.preventDefault();
+    const details: Record<string, unknown> = { notSure };
+    for (const f of ALL_FIELDS) if (form[f.key]?.trim() && !notSure.includes(f.key)) details[f.key] = form[f.key].trim();
+    if (await run(() => patch(`/project-products/${product.id}`, { details }), 'Product details saved')) { setOpen(false); reload(); }
+  };
+  const toggle = (key: string) => setNotSure((s) => (s.includes(key) ? s.filter((k) => k !== key) : [...s, key]));
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div className="row between">
+        <span className="eyebrow">Product details</span>
+        <button className="btn small secondary" onClick={edit}>{filled.length || unsure.length ? 'Edit details' : 'Add details'}</button>
+      </div>
+      {filled.length || unsure.length ? (
+        <Kv rows={[
+          ...filled.map((f): [string, string] => [f.label, f.key === 'path' ? pathLabel(d.path as string) ?? '' : (d[f.key] as string)]),
+          ...(unsure.length ? [['Not sure yet', unsure.map((k) => ALL_FIELDS.find((f) => f.key === k)?.label ?? k).join(', ')] as [string, string]] : []),
+        ]} />
+      ) : <p className="small muted" style={{ marginTop: 6 }}>No details yet – format, fill size, ingredients, packaging, market and launch help us prepare samples and a quote.</p>}
+      <Modal open={open} title={`Details – ${product.name}`} onClose={() => setOpen(false)}>
+        <form className="stack" onSubmit={save}>
+          <p className="small muted">Fill in what you know. Tick “Not sure yet” for anything still open – we will work it out together. This is a brief, not an order.</p>
+          {DETAIL_GROUPS.map(([group, fields]) => (
+            <fieldset key={group} className="form-grid" style={{ border: 0, padding: 0, margin: 0 }}>
+              <legend className="eyebrow" style={{ marginBottom: 6 }}>{group}</legend>
+              {fields.map((f) => {
+                const off = notSure.includes(f.key);
+                return (
+                  <label key={f.key} className={`field${f.long ? ' full' : ''}`}>
+                    <span className="row between">{f.label}
+                      <span className="small muted" style={{ fontWeight: 400 }}>
+                        <input type="checkbox" checked={off} onChange={() => toggle(f.key)} aria-label={`${f.label}: not sure yet`} /> Not sure yet
+                      </span>
+                    </span>
+                    {f.key === 'path' ? (
+                      <select value={form.path ?? ''} disabled={off} onChange={(e) => setForm({ ...form, path: e.target.value })}>
+                        <option value="">Choose…</option>
+                        {PATHS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                      </select>
+                    ) : f.long ? (
+                      <textarea rows={2} maxLength={2000} disabled={off} placeholder={f.hint} value={form[f.key] ?? ''} onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} />
+                    ) : (
+                      <input maxLength={f.key === 'launchDate' ? 100 : 200} disabled={off} placeholder={f.hint} value={form[f.key] ?? ''} onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} />
+                    )}
+                  </label>
+                );
+              })}
+            </fieldset>
+          ))}
+          <button className="btn" disabled={busy}>Save details</button>
+        </form>
+      </Modal>
+    </div>
+  );
+}
+
+// ===================================================================== project status (reason for on hold / cancelled)
+function ProjectStatus({ project, reload }: { project: ProjectDetail; reload: () => void }) {
+  const { busy, run } = useAction();
+  const [pending, setPending] = useState<string | null>(null);
+  const [reason, setReason] = useState('');
+  const change = async (status: string, statusReason?: string) => {
+    if (await run(() => patch(`/projects/${project.id}`, { status, statusReason }), 'Project updated')) { setPending(null); setReason(''); reload(); }
+  };
+  return (
+    <>
+      <select className="input" value={project.status} disabled={busy} aria-label="Project status"
+        onChange={(e) => (['on_hold', 'cancelled'].includes(e.target.value) ? setPending(e.target.value) : change(e.target.value))}>
+        {PROJECT_STATUSES.map((s) => <option key={s} value={s}>{humanize(s)}</option>)}
+      </select>
+      <Modal open={!!pending} title={`Set project to “${humanize(pending ?? '')}”`} onClose={() => setPending(null)}>
+        <form className="stack" onSubmit={(e) => { e.preventDefault(); if (pending && reason.trim()) void change(pending, reason.trim()); }}>
+          <label className="field"><span>Reason (kept in the project history)</span>
+            <textarea rows={3} required maxLength={2000} autoFocus value={reason} onChange={(e) => setReason(e.target.value)} />
+          </label>
+          <button className="btn" disabled={busy || !reason.trim()}>Set to {humanize(pending ?? '')}</button>
+        </form>
+      </Modal>
+    </>
+  );
+}
+
 // ===================================================================== briefs
 function Briefs({ product, projectId }: { product: ProjectProduct; projectId: string }) {
   const briefs = useApi<Brief[]>(`/project-products/${product.id}/briefs`);
@@ -208,11 +330,85 @@ function Briefs({ product, projectId }: { product: ProjectProduct; projectId: st
 }
 
 // ===================================================================== samples
+const FEEDBACK_FIELDS: [keyof FeedbackDetails, string, string][] = [
+  ['appearance', 'Colour / appearance', 'e.g. A bit too yellow'], ['texture', 'Texture / thickness', 'e.g. Too runny, absorbs fast'],
+  ['scent', 'Scent', 'e.g. Fragrance too strong'], ['performance', 'Performance / application', 'e.g. Lathers well, spreads easily'],
+  ['afterFeel', 'After-feel', 'e.g. Slightly sticky after 10 minutes'], ['packaging', 'Packaging', 'e.g. Pump works, label too small'],
+];
+const DECISIONS: Record<string, string> = { approved_next_stage: 'Approved for next-stage discussion', request_changes: 'Changes requested' };
+
+function FeedbackView({ f }: { f: Feedback }) {
+  const d = f.details ?? {};
+  const rows = FEEDBACK_FIELDS.filter(([k]) => d[k]).map(([k, label]): [string, string] => [label, d[k] as string]);
+  return (
+    <div className="card pad" style={{ marginTop: 8 }}>
+      <div className="row between">
+        <span>{f.rating ? `★ ${f.rating}/5` : 'Feedback'}{d.decision && <> · {DECISIONS[d.decision]}</>}</span>
+        <span className="muted">{f.inquiryId ? 'From the website form · ' : ''}{fmtDate(f.createdAt)}</span>
+      </div>
+      {rows.length > 0 && <Kv rows={rows} />}
+      {d.changes && <p className="pre"><b style={{ fontWeight: 500 }}>Requested changes:</b> {d.changes}</p>}
+      {f.comments && <p className="pre muted">{f.comments}</p>}
+      {!!d.documentIds?.length && <p className="muted">{d.documentIds.length} photo(s) / file(s) – see Documents.</p>}
+    </div>
+  );
+}
+
+function FeedbackForm({ revisionId, revisionNo, projectId, onSent }: { revisionId: string; revisionNo: number; projectId: string; onSent: () => void }) {
+  const { busy, run } = useAction();
+  const [rating, setRating] = useState('');
+  const [decision, setDecision] = useState('');
+  const [d, setD] = useState<Record<string, string>>({});
+  const [comments, setComments] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
+  const empty = !rating && !decision && !comments.trim() && !Object.values(d).some((v) => v.trim()) && !files.length;
+  const send = async (e: FormEvent) => {
+    e.preventDefault();
+    const ok = await run(async () => {
+      const documentIds: string[] = [];
+      for (const file of files) documentIds.push((await uploadFile(file, { projectId, title: `Sample feedback – revision ${revisionNo}`, visibility: 'customer' })).documentId);
+      const details = { ...Object.fromEntries(Object.entries(d).filter(([, v]) => v.trim())), decision: decision || undefined, documentIds: documentIds.length ? documentIds : undefined };
+      return post(`/sample-revisions/${revisionId}/feedback`, { rating: rating ? Number(rating) : undefined, comments: comments.trim() || undefined, details });
+    }, 'Feedback sent');
+    if (ok) { setRating(''); setDecision(''); setD({}); setComments(''); setFiles([]); onSent(); }
+  };
+  return (
+    <form className="form-grid" style={{ marginTop: 12 }} onSubmit={send}>
+      <p className="small muted full">Feedback on revision {revisionNo}. Answer what you can – every field is optional. Feedback is not a production approval.</p>
+      <label className="field"><span>Overall rating</span>
+        <select value={rating} onChange={(e) => setRating(e.target.value)}><option value="">–</option>{[5, 4, 3, 2, 1].map((n) => <option key={n} value={n}>{n} / 5</option>)}</select></label>
+      <label className="field"><span>Your decision</span>
+        <select value={decision} onChange={(e) => setDecision(e.target.value)}><option value="">Not decided yet</option>{Object.entries(DECISIONS).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></label>
+      {FEEDBACK_FIELDS.map(([k, label, hint]) => (
+        <label key={k} className="field"><span>{label}</span><textarea rows={2} maxLength={2000} placeholder={hint} value={d[k] ?? ''} onChange={(e) => setD({ ...d, [k]: e.target.value })} /></label>
+      ))}
+      <label className="field full"><span>What should change in the next revision?</span><textarea rows={3} maxLength={4000} value={d.changes ?? ''} onChange={(e) => setD({ ...d, changes: e.target.value })} /></label>
+      <label className="field full"><span>Other comments</span><textarea rows={2} maxLength={10000} value={comments} onChange={(e) => setComments(e.target.value)} /></label>
+      <label className="field full"><span>Photos or files (optional, up to 5)</span>
+        <input type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.docx,.xlsx" onChange={(e) => setFiles([...(e.target.files ?? [])].slice(0, 5))} /></label>
+      <div className="full"><button className="btn small" disabled={busy || empty}>Send feedback</button></div>
+    </form>
+  );
+}
+
+/** Staff: attach a sample review sent from the public website form (reference DP-INQ-…) to this revision. */
+function LinkWebsiteReview({ revisionId, revisionNo, onLinked }: { revisionId: string; revisionNo: number; onLinked: () => void }) {
+  const { busy, run } = useAction();
+  const [ref, setRef] = useState('');
+  return (
+    <form className="row" style={{ marginTop: 6 }} onSubmit={async (e) => {
+      e.preventDefault();
+      if (await run(() => post(`/sample-revisions/${revisionId}/link-inquiry`, { inquiry: ref.trim() }), `Website review linked to revision ${revisionNo}`)) { setRef(''); onLinked(); }
+    }}>
+      <input className="input" style={{ flex: 1 }} placeholder="Website sample review reference, e.g. DP-INQ-2026-000123" value={ref} onChange={(e) => setRef(e.target.value)} />
+      <button className="btn small ghost" disabled={busy || !ref.trim()}>Link review</button>
+    </form>
+  );
+}
+
 function SampleCard({ sampleId, projectId, staff }: { sampleId: string; projectId: string; staff: boolean }) {
   const s = useApi<SampleDetail>(`/samples/${sampleId}`);
   const { busy, run } = useAction();
-  const [rating, setRating] = useState('5');
-  const [comments, setComments] = useState('');
   const [desc, setDesc] = useState('');
   const [tracking, setTracking] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -232,7 +428,8 @@ function SampleCard({ sampleId, projectId, staff }: { sampleId: string; projectI
         <div key={r.id} style={{ borderTop: '1px solid var(--line-2)', marginTop: 10, paddingTop: 10 }} className="small">
           <div className="row between"><b style={{ fontWeight: 500 }}>Revision {r.revisionNo}</b><span className="muted">{r.shippedAt ? `Shipped ${fmtDate(r.shippedAt)}` : 'In development'}{r.trackingNo && ` · ${r.trackingNo}`}</span></div>
           {r.description && <p className="pre">{r.description}</p>}
-          {r.feedback.map((f) => <p key={f.id} className="muted">★ {f.rating ?? '–'}/5 — {f.comments}</p>)}
+          {r.feedback.map((f) => <FeedbackView key={f.id} f={f} />)}
+          {staff && <LinkWebsiteReview revisionId={r.id} revisionNo={r.revisionNo} onLinked={s.reload} />}
           {staff && r.shippedAt && (
             <button className="btn small ghost" style={{ marginTop: 6 }} disabled={busy} title="E-mail the customer asking for feedback on this revision"
               onClick={() => run(() => post(`/sample-revisions/${r.id}/request-feedback`), `Feedback requested for revision ${r.revisionNo}`)}>Ask for feedback</button>
@@ -245,16 +442,7 @@ function SampleCard({ sampleId, projectId, staff }: { sampleId: string; projectI
           )}
         </div>
       ))}
-      {latest && (
-        <form className="form-grid" style={{ marginTop: 12 }} onSubmit={async (e) => {
-          e.preventDefault();
-          if (await run(() => post(`/sample-revisions/${latest.id}/feedback`, { rating: Number(rating), comments }), 'Feedback sent')) { setComments(''); s.reload(); }
-        }}>
-          <label className="field"><span>Rating</span><select value={rating} onChange={(e) => setRating(e.target.value)}>{[5, 4, 3, 2, 1].map((n) => <option key={n} value={n}>{n} / 5</option>)}</select></label>
-          <label className="field full"><span>Feedback on revision {latest.revisionNo}</span><textarea rows={3} required value={comments} onChange={(e) => setComments(e.target.value)} /></label>
-          <div className="full"><button className="btn small" disabled={busy}>Send feedback</button></div>
-        </form>
-      )}
+      {latest && <FeedbackForm revisionId={latest.id} revisionNo={latest.revisionNo} projectId={projectId} onSent={s.reload} />}
       {latest && !staff && (
         <form className="row" style={{ marginTop: 10 }} onSubmit={async (e) => {
           e.preventDefault();
@@ -293,6 +481,7 @@ function Products({ project, staff, reload }: { project: ProjectDetail; staff: b
               }}>Remove</button>
             </div>
             <hr />
+            <ProductDetails product={p} reload={reload} />
             <ProductStages product={p} projectId={project.id} staff={staff} reload={reload} />
             <Briefs product={p} projectId={project.id} />
             <div style={{ marginTop: 12 }}>
@@ -319,8 +508,18 @@ function Products({ project, staff, reload }: { project: ProjectDetail; staff: b
 
 // ===================================================================== quotes
 type Line = { description: string; quantity: string; unitPrice: string };
-function QuoteEditor({ initial, onSave, busy }: { initial?: Line[]; onSave: (v: { currency: string; validUntil?: string; lines: { description: string; quantity: number; unitPrice: number }[] }) => void; busy: boolean }) {
+const QUOTE_TERMS: [keyof QuoteTerms, string, string][] = [
+  ['paymentSchedule', 'Payment schedule', 'e.g. 50% deposit with the order, 50% before dispatch'],
+  ['taxes', 'Taxes', 'e.g. Prices exclude VAT (14%) and import duties'],
+  ['exclusions', 'Not included', 'e.g. Stability testing, artwork design, shipping'],
+  ['assumptions', 'Assumptions', 'e.g. Based on the approved sample, standard 50 ml bottle, one fragrance'],
+  ['leadTime', 'Estimated lead time', 'e.g. About 6–8 weeks after approval (an estimate, not a commitment)'],
+];
+
+type QuoteSave = { currency: string; validUntil?: string; terms: QuoteTerms; lines: { description: string; quantity: number; unitPrice: number }[] };
+function QuoteEditor({ initial, initialTerms, onSave, busy }: { initial?: Line[]; initialTerms?: QuoteTerms; onSave: (v: QuoteSave) => void; busy: boolean }) {
   const [lines, setLines] = useState<Line[]>(initial ?? [{ description: '', quantity: '1', unitPrice: '0' }]);
+  const [terms, setTerms] = useState<QuoteTerms>(initialTerms ?? {});
   const [currency, setCurrency] = useState('USD');
   const [validUntil, setValidUntil] = useState('');
   const total = lines.reduce((s, l) => s + Number(l.quantity || 0) * Number(l.unitPrice || 0), 0);
@@ -328,7 +527,7 @@ function QuoteEditor({ initial, onSave, busy }: { initial?: Line[]; onSave: (v: 
   return (
     <form className="stack" onSubmit={(e) => {
       e.preventDefault();
-      onSave({ currency, validUntil: validUntil || undefined, lines: lines.filter((l) => l.description.trim()).map((l) => ({ description: l.description, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice) })) });
+      onSave({ currency, validUntil: validUntil || undefined, terms, lines: lines.filter((l) => l.description.trim()).map((l) => ({ description: l.description, quantity: Number(l.quantity), unitPrice: Number(l.unitPrice) })) });
     }}>
       <table className="table">
         <thead><tr><th>Description</th><th style={{ width: 110 }}>Qty</th><th style={{ width: 130 }}>Unit price</th><th style={{ width: 110 }}>Total</th><th /></tr></thead>
@@ -351,6 +550,11 @@ function QuoteEditor({ initial, onSave, busy }: { initial?: Line[]; onSave: (v: 
       <div className="form-grid">
         <label className="field"><span>Currency</span><input maxLength={3} minLength={3} value={currency} onChange={(e) => setCurrency(e.target.value.toUpperCase())} /></label>
         <label className="field"><span>Valid until</span><input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} /></label>
+        {QUOTE_TERMS.map(([k, label, hint]) => (
+          <label key={k} className="field full"><span>{label} (optional)</span>
+            <textarea rows={2} maxLength={k === 'leadTime' ? 500 : 2000} placeholder={hint} value={terms[k] ?? ''} onChange={(e) => setTerms({ ...terms, [k]: e.target.value })} />
+          </label>
+        ))}
       </div>
       <button className="btn" disabled={busy}>Save quote</button>
     </form>
@@ -392,6 +596,9 @@ function QuoteView({ quoteId, projectId, staff, onChanged }: { quoteId: string; 
               <tr><td colSpan={3}><b style={{ fontWeight: 500 }}>Total</b>{latest.validUntil && <span className="small muted"> · valid until {fmtDate(latest.validUntil)}</span>}</td><td style={{ textAlign: 'right' }}><b style={{ fontWeight: 500 }}>{fmtMoney(latest.total, latest.currency)}</b></td></tr>
             </tbody>
           </table>
+          {QUOTE_TERMS.some(([k]) => latest.terms?.[k]) && (
+            <Kv rows={QUOTE_TERMS.filter(([k]) => latest.terms?.[k]).map(([k, label]) => [label, <span key={k} className="pre">{latest.terms![k]}</span>])} />
+          )}
           {latest.approvals.map((a) => <p key={a.id} className="small" style={{ marginTop: 8 }}><Badge value="accepted" /> {fmtDate(a.approvedAt, true)} — “{a.confirmationText}”</p>)}
           {q.data.versions.flatMap((v) => (v.responses ?? []).map((r) => (
             <p key={r.id} className="small" style={{ marginTop: 8 }}>
@@ -446,7 +653,7 @@ function QuoteView({ quoteId, projectId, staff, onChanged }: { quoteId: string; 
       )}
       {revising && latest && (
         <div style={{ marginTop: 12 }}>
-          <QuoteEditor busy={busy} initial={latest.lines.map((l) => ({ description: l.description, quantity: String(Number(l.quantity)), unitPrice: String(Number(l.unitPrice)) }))}
+          <QuoteEditor busy={busy} initialTerms={latest.terms} initial={latest.lines.map((l) => ({ description: l.description, quantity: String(Number(l.quantity)), unitPrice: String(Number(l.unitPrice)) }))}
             onSave={async (v) => { if (await run(() => post(`/quotes/${quoteId}/versions`, v), 'New quote version saved (draft)')) { setRevising(false); reload(); } }} />
         </div>
       )}
@@ -524,10 +731,7 @@ export function ProjectWorkspace({ id, backHref }: { id: string; backHref: strin
       <p className="small"><Link href={backHref}>← Projects</Link></p>
       <PageHead eyebrow={project.code} title={project.name} sub={<>{project.company?.name}{project.owner && ` · Despina contact: ${project.owner.email}`}</>}>
         {staff ? (
-          <select className="input" value={project.status} disabled={busy} aria-label="Project status"
-            onChange={async (e) => { if (await run(() => patch(`/projects/${id}`, { status: e.target.value }), 'Project updated')) p.reload(); }}>
-            {PROJECT_STATUSES.map((s) => <option key={s} value={s}>{humanize(s)}</option>)}
-          </select>
+          <ProjectStatus project={project} reload={p.reload} />
         ) : <Badge value={project.status} />}
         {staff && project.sourceInquiryId && <Link className="btn secondary" href={`/admin/inquiries/${project.sourceInquiryId}/`}>Original inquiry</Link>}
         {me?.role === 'admin' && <Link className="btn secondary" href={`/admin/audit/?projectId=${project.id}`}>Audit history</Link>}

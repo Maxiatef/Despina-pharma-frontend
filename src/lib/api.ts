@@ -7,8 +7,19 @@ export class ApiError extends Error {
     readonly status: number,
     message: string,
     readonly body: unknown,
+    /** Tracking ID of the failed request (also in the server log), to quote when reporting a problem. */
+    readonly requestId: string | null = null,
   ) {
     super(message);
+  }
+}
+
+/** A new tracking ID for each request; the server keeps it with the saved record, its e-mails and its log lines. */
+function newRequestId(): string {
+  try {
+    return crypto.randomUUID();
+  } catch {
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
   }
 }
 
@@ -32,7 +43,8 @@ export interface ApiOptions {
 }
 
 export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Promise<T> {
-  const headers: Record<string, string> = { Accept: 'application/json', ...opts.headers };
+  const requestId = newRequestId();
+  const headers: Record<string, string> = { Accept: 'application/json', 'X-Request-Id': requestId, ...opts.headers };
   let body: BodyInit | undefined = opts.raw;
   if (opts.body !== undefined) {
     headers['Content-Type'] = 'application/json';
@@ -52,7 +64,7 @@ export async function api<T = unknown>(path: string, opts: ApiOptions = {}): Pro
   } catch {
     /* plain text, e.g. CSV */
   }
-  if (!res.ok) throw new ApiError(res.status, messageOf(data, res.status), data);
+  if (!res.ok) throw new ApiError(res.status, messageOf(data, res.status), data, res.headers.get('X-Request-Id') ?? requestId);
   return data as T;
 }
 

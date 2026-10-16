@@ -137,6 +137,76 @@ function Sessions() {
   );
 }
 
+interface TeamCompany {
+  id: string; name: string; canManage: boolean;
+  people: { id: string; email: string; name: string | null; role: string; status: 'active' | 'invited'; isYou: boolean }[];
+}
+
+/** Colleagues in the customer's company. The company's main contact can invite and remove them. */
+function Team() {
+  const t = useApi<{ companies: TeamCompany[] }>('/portal/team');
+  const { busy, run } = useAction();
+  const [inviteTo, setInviteTo] = useState<string | null>(null);
+  if (!t.data?.companies.length) return <ErrorBox error={t.error} onRetry={t.reload} />;
+
+  async function invite(e: FormEvent<HTMLFormElement>, companyId: string) {
+    e.preventDefault();
+    const f = e.currentTarget;
+    const v = formValues(f);
+    const r = await run(() => post<{ emailStatus: string }>('/portal/team/invite', {
+      companyId, email: v.email, firstName: v.firstName, lastName: v.lastName || undefined, jobTitle: v.jobTitle || undefined,
+      role: v.owner ? 'owner' : 'member',
+    }), 'Invitation sent');
+    if (r) { f.reset(); setInviteTo(null); t.reload(); }
+  }
+
+  return (
+    <>
+      {t.data.companies.map((co) => (
+        <div className="card" key={co.id}>
+          <div className="card-head">
+            <h2>Team – {co.name}</h2>
+            {co.canManage && <button className="btn small" onClick={() => setInviteTo(inviteTo === co.id ? null : co.id)}>Invite a colleague</button>}
+          </div>
+          {inviteTo === co.id && (
+            <form className="form-grid card-body" onSubmit={(e) => invite(e, co.id)}>
+              <label className="field"><span>First name</span><input name="firstName" required maxLength={100} /></label>
+              <label className="field"><span>Last name</span><input name="lastName" maxLength={100} /></label>
+              <label className="field"><span>Email</span><input name="email" type="email" required maxLength={254} /></label>
+              <label className="field"><span>Job title</span><input name="jobTitle" maxLength={150} /></label>
+              <label className="check full"><input type="checkbox" name="owner" /> Can also invite and remove colleagues</label>
+              <p className="small muted full">They get an e-mail to set a password and will see all of {co.name}’s projects.</p>
+              <div className="full row"><button className="btn" disabled={busy}>Send invitation</button><button type="button" className="btn ghost" onClick={() => setInviteTo(null)}>Cancel</button></div>
+            </form>
+          )}
+          <table className="table">
+            <tbody>
+              {co.people.map((p) => (
+                <tr key={p.id}>
+                  <td className="small">{p.name ?? p.email}{p.name && <div className="muted">{p.email}</div>}</td>
+                  <td className="small">{p.role === 'owner' ? 'Main contact' : 'Member'}{p.isYou && <span className="muted"> (you)</span>}</td>
+                  <td><span className={`badge ${p.status === 'active' ? 'ok' : 'warn'}`}>{p.status === 'active' ? 'Active' : 'Invited'}</span></td>
+                  <td style={{ textAlign: 'right' }}>
+                    {co.canManage && !p.isYou && (
+                      <span className="row" style={{ justifyContent: 'flex-end' }}>
+                        {p.status === 'invited' && <button className="btn small secondary" disabled={busy} onClick={async () => { await run(() => post(`/portal/team/${p.id}/resend`), 'Invitation sent again'); }}>Send again</button>}
+                        <button className="btn small ghost" disabled={busy} onClick={async () => {
+                          if (confirm(`Remove ${p.name ?? p.email}? They will lose access to ${co.name}’s projects at once.`) && await run(() => post(`/portal/team/${p.id}/remove`), 'Colleague removed')) t.reload();
+                        }}>Remove</button>
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!co.canManage && <p className="small muted card-body">To add or remove colleagues, ask your company’s main contact or Despina Pharma.</p>}
+        </div>
+      ))}
+    </>
+  );
+}
+
 function AccountInner() {
   const { me: auth } = useAuth();
   const me = useApi<PortalMe>('/portal/me');
@@ -156,6 +226,7 @@ function AccountInner() {
           <Sessions />
         </div>
       </div>
+      {!isStaff(auth?.role) && <div className="stack" style={{ marginTop: 20 }}><Team /></div>}
     </>
   );
 }

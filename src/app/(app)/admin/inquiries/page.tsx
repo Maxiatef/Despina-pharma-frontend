@@ -16,14 +16,15 @@ function Inquiries() {
   const router = useRouter();
   const { me } = useAuth();
   const { values, all, set } = useQueryState();
-  const view = values.view === 'board' ? 'board' : 'table';
+  const view = values.view === 'board' ? 'board' : values.view === 'held' ? 'held' : 'table';
 
   const filters = {
     q: values.q, status: all('status'), formType: values.formType, inquiryType: values.inquiryType, assigneeId: values.assigneeId,
     unassigned: values.unassigned, overdue: values.overdue, from: values.from, to: values.to, sort: values.sort,
   };
   const page = Number(values.page ?? 1);
-  const list = useApi<Paged<InquiryRow>>(view === 'table' ? `/inquiries${qs({ ...filters, page, pageSize: 25 })}` : null);
+  const list = useApi<Paged<InquiryRow>>(view !== 'board' ? `/inquiries${qs({ ...filters, held: view === 'held' ? 'true' : undefined, page, pageSize: 25 })}` : null);
+  const summary = useApi<{ held: number }>('/inquiries/summary');
   const board = useApi<BoardData>(view === 'board' ? `/inquiries/board${qs({ ...filters, status: undefined })}` : null);
   const staff = useApi<{ id: string; email: string }[]>('/users/staff');
   const canExport = me?.role === 'admin' || me?.role === 'sales';
@@ -34,6 +35,9 @@ function Inquiries() {
         <div className="tabs" style={{ margin: 0, border: 0 }}>
           <button className={view === 'table' ? 'active' : ''} onClick={() => set({ view: undefined })}>Table</button>
           <button className={view === 'board' ? 'active' : ''} onClick={() => set({ view: 'board' })}>Board</button>
+          {(view === 'held' || !!summary.data?.held) && (
+            <button className={view === 'held' ? 'active' : ''} onClick={() => set({ view: 'held', page: undefined })}>Held as spam ({summary.data?.held ?? 0})</button>
+          )}
         </div>
         {canExport && (
           <a className="btn secondary" href={`/api/inquiries/export.csv${qs(filters)}`}>Export CSV</a>
@@ -43,7 +47,7 @@ function Inquiries() {
       <div className="card pad" style={{ marginBottom: 16 }}>
         <form className="toolbar" style={{ margin: 0 }} onSubmit={(e) => { e.preventDefault(); set({ q: String(new FormData(e.currentTarget).get('q') ?? '') }); }}>
           <input key={values.q ?? ''} name="q" className="input grow" type="search" placeholder="Search reference, name, email, company or message…" defaultValue={values.q ?? ''} />
-          {view === 'table' && (
+          {view !== 'board' && (
             <select className="input" value={all('status')[0] ?? ''} onChange={(e) => set({ status: e.target.value || undefined })} aria-label="Status">
               <option value="">All statuses</option>
               {INQUIRY_STATUSES.map((s) => <option key={s} value={s}>{humanize(s)}</option>)}
@@ -75,7 +79,12 @@ function Inquiries() {
         </form>
       </div>
 
-      {view === 'table' ? (
+      {view === 'held' && (
+        <div className="alert warn" style={{ marginBottom: 16 }}>
+          These forms looked like spam, so nobody was e-mailed and no follow-up task was made. Open one to release it (not spam) or delete it.
+        </div>
+      )}
+      {view !== 'board' ? (
         <div className="card">
           <ErrorBox error={list.error} onRetry={list.reload} />
           {list.loading && !list.data ? <Loading /> : list.data && (

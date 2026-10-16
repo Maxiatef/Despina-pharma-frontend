@@ -55,6 +55,10 @@ export interface InquiryRow extends Base {
   referenceNo: string; formType: FormType; inquiryType: string | null; status: InquiryStatus; contactId: string; companyId: string | null;
   message: string | null; payload: { form?: string; fields?: Record<string, string | string[]>; labels?: Record<string, string> } & Record<string, unknown>;
   sourcePage: string | null;
+  /** Set when the spam check held the form: no e-mails or follow-up until staff release it. */
+  heldAt?: string | null; holdReasons?: string[] | null;
+  /** Tracking ID of the website request that created it (also on its e-mails and in the server log). */
+  requestId?: string | null;
   contact: { firstName: string; lastName: string | null; email: string };
   companyName: string | null; assignee: { id: string; email: string } | null; nextDueAt: string | null;
 }
@@ -87,6 +91,7 @@ export interface EmailJob extends Base {
   inquiryId: string | null; projectId: string | null; kind: string; toEmail: string; subject: string; status: string;
   attempts: number; lastError: string | null; sentAt: string | null; providerMessageId: string | null;
   template?: string | null; lastEvent?: string | null; lastEventAt?: string | null; bodyHtml?: string | null; bodyText?: string | null;
+  requestId?: string | null;
 }
 export interface EmailEventRow { id: string; event: string; occurredAt: string }
 
@@ -119,6 +124,8 @@ export interface ProjectStage extends Base {
 export interface Sample extends Base { projectProductId: string; inquiryId: string | null; title: string; status: (typeof SAMPLE_STATUSES)[number] }
 export interface ProjectProduct extends Base {
   projectId: string; catalogItemId: string | null; serviceId: string | null; name: string; targetQuantity: number | null; notes: string | null; samples?: Sample[];
+  /** Product-line brief (format, path, fill size, ingredients, packaging, market…); notSure = fields not decided yet. */
+  details?: { [field: string]: string | string[] | undefined; notSure?: string[] };
   /** This product line's own stage track (stages per product line). */
   currentStageId: string | null; stages?: ProjectStage[]; stageSummary?: { done: number; total: number; current: string | null } | null;
 }
@@ -131,8 +138,11 @@ export interface Approval extends Base {
 export interface QuoteResponse extends Base {
   quoteId: string; quoteVersionId: string; decision: 'declined' | 'changes_requested'; note: string | null; respondedBy: string | null;
 }
+export interface QuoteTerms { paymentSchedule?: string; taxes?: string; exclusions?: string; assumptions?: string; leadTime?: string }
 export interface QuoteVersion extends Base {
   quoteId: string; versionNo: number; currency: string; total: string; validUntil: string | null; documentVersionId: string | null;
+  /** Payment schedule, taxes, exclusions, assumptions, lead time (free text; empty ones are left out). */
+  terms?: QuoteTerms;
   lines: QuoteLine[]; approvals: Approval[]; responses: QuoteResponse[];
 }
 export interface QuoteDetail extends Quote { versions: QuoteVersion[] }
@@ -147,7 +157,12 @@ export interface ProjectDetail extends ProjectRow {
 
 export interface BriefVersion extends Base { briefId: string; versionNo: number; content: Record<string, unknown>; createdBy: string | null }
 export interface Brief extends Base { projectProductId: string; title: string; versions?: BriefVersion[] }
-export interface Feedback extends Base { sampleRevisionId: string; authorId: string | null; rating: number | null; comments: string | null }
+export interface FeedbackDetails {
+  decision?: 'approved_next_stage' | 'request_changes';
+  appearance?: string; texture?: string; scent?: string; performance?: string; afterFeel?: string; packaging?: string; changes?: string;
+  documentIds?: string[];
+}
+export interface Feedback extends Base { sampleRevisionId: string; authorId: string | null; inquiryId?: string | null; rating: number | null; comments: string | null; details?: FeedbackDetails }
 export interface SampleRevision extends Base { sampleId: string; revisionNo: number; description: string | null; shippedAt: string | null; trackingNo: string | null; feedback: Feedback[] }
 export interface SampleDetail extends Sample { revisions: SampleRevision[] }
 export interface Message extends Base { projectId: string | null; inquiryId: string | null; senderId: string | null; senderContactId: string | null; body: string; viaEmail: boolean }

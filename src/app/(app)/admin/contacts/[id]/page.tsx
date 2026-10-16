@@ -5,7 +5,8 @@ import type { FormEvent } from 'react';
 import Link from 'next/link';
 import { get, patch, post } from '@/lib/api';
 import type { Company, Contact, Paged } from '@/lib/types';
-import { Badge, ErrorBox, Loading, PageHead, fmtDate, formValues, humanize, useAction, useApi } from '@/components/app/ui';
+import { Badge, ErrorBox, Loading, Modal, PageHead, fmtDate, formValues, humanize, useAction, useApi } from '@/components/app/ui';
+import { useAuth } from '@/components/app/auth';
 
 interface ContactDetail extends Contact {
   inquiries: { id: string; referenceNo: string; formType: string; status: string; createdAt: string }[];
@@ -18,6 +19,9 @@ export default function ContactPage({ params }: { params: Promise<{ id: string }
   const companies = useApi<Paged<Company>>('/companies?pageSize=200');
   const { busy, run } = useAction();
   const [unsub, setUnsub] = useState<string | null>(null);
+  const { me } = useAuth();
+  const [erase, setErase] = useState(false);
+  const [confirmEmail, setConfirmEmail] = useState('');
 
   if (c.loading && !c.data) return <Loading />;
   if (!c.data) return <ErrorBox error={c.error} onRetry={c.reload} />;
@@ -81,8 +85,30 @@ export default function ContactPage({ params }: { params: Promise<{ id: string }
             if (r) setUnsub(r.url);
           }}>Get one-click unsubscribe link</button>
           {unsub && <input className="input mono small" style={{ marginTop: 8 }} readOnly value={unsub} onFocus={(e) => e.target.select()} />}
+          {me?.role === 'admin' && (
+            <>
+              <h3 style={{ marginTop: 24 }}>Privacy requests</h3>
+              <p className="small muted" style={{ marginTop: 6 }}>When this person asks for a copy of their data, or asks you to delete it.</p>
+              <div className="row" style={{ marginTop: 10 }}>
+                <a className="btn small secondary" href={`/api/contacts/${id}/export`} download>Download their data</a>
+                <button className="btn small danger" onClick={() => { setConfirmEmail(''); setErase(true); }}>Delete their personal data</button>
+              </div>
+            </>
+          )}
         </div>
       </div>
+      <Modal open={erase} title="Delete this person's data" onClose={() => setErase(false)}>
+        <form className="stack" onSubmit={async (e) => {
+          e.preventDefault();
+          const r = await run(() => post<{ forms: number; filesDeleted: number }>(`/contacts/${id}/erase`, { confirm: confirmEmail }), 'Personal data deleted');
+          if (r) { setErase(false); c.reload(); }
+        }}>
+          <p className="small">This removes their name, e-mail, phone, form answers, messages on their leads, e-mail copies and the files they sent with website forms. Their login (if any) is closed.</p>
+          <p className="small muted">Kept without their details: the leads and projects themselves, quotes and approvals, and the dates they gave consent. This cannot be undone – download their data first if they asked for a copy too.</p>
+          <label className="field"><span>Type their e-mail address to confirm</span><input value={confirmEmail} onChange={(e) => setConfirmEmail(e.target.value)} placeholder={d.email} required /></label>
+          <button className="btn danger" disabled={busy || confirmEmail.trim().toLowerCase() !== d.email.toLowerCase()}>Delete personal data</button>
+        </form>
+      </Modal>
     </>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { ApiError, get, post, qs, uploadFile } from '@/lib/api';
+import { readList, writeList } from './ProjectList';
 
 /**
  * Connects the site's original project forms (form[data-project-form]) to the backend.
@@ -188,7 +189,7 @@ function addInquiryType(form: HTMLFormElement, params: URLSearchParams) {
   sync();
 }
 
-/** Sample request: pre-fill the product from ?product= or ?format= (links from product pages). */
+/** Sample request and product brief: pre-fill the product from ?product= or ?format= (links from product pages). */
 function prefillSampleRequest(form: HTMLFormElement, params: URLSearchParams) {
   const product = params.get('product') || params.get('format');
   const input = form.querySelector<HTMLInputElement>('[name="productName"]');
@@ -199,16 +200,108 @@ function prefillSampleRequest(form: HTMLFormElement, params: URLSearchParams) {
   if (match) select!.value = match.value;
 }
 
+const ACCEPT = '.pdf,.jpg,.jpeg,.png,.docx,.xlsx';
+const MAX_FILES = 5;
+const MAX_BYTES = 10 * 1024 * 1024;
+
+/** Product brief: the concepts the visitor collected with "Add to project list" (sent as product lines). */
+function addProjectList(form: HTMLFormElement): () => void {
+  const bottom = form.querySelector('.form-bottom');
+  const section = document.createElement('fieldset');
+  section.className = 'resource-form-section project-list';
+  const render = () => {
+    const list = readList();
+    section.hidden = !list.length;
+    section.innerHTML = '<legend>Your project list</legend><div class="form-grid"><div class="field full"><small>These concepts are sent with your brief as starting points – not an order.</small><div class="catalog-chips" style="margin-top:8px"></div></div></div>';
+    const chips = section.querySelector('.catalog-chips')!;
+    for (const item of list) {
+      const chip = document.createElement('span');
+      chip.textContent = `${item.name}${item.category ? ` · ${item.category}` : ''} `;
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.textContent = '×';
+      remove.setAttribute('aria-label', `Remove ${item.name} from the list`);
+      remove.style.cssText = 'background:none;border:0;cursor:pointer;font:inherit;padding:0 2px';
+      remove.addEventListener('click', () => { writeList(readList().filter((x) => x.path !== item.path)); render(); });
+      chip.append(remove);
+      chips.append(chip);
+    }
+  };
+  form.insertBefore(section, form.querySelector('fieldset.resource-form-section:has(input[type="file"])') ?? bottom);
+  render();
+  return () => section.remove();
+}
+
+/** Forms without a file field get an optional "Attachments" field (never required). */
+function addAttachments(form: HTMLFormElement) {
+  if (form.querySelector('input[type="file"]')) return;
+  const bottom = form.querySelector('.form-bottom');
+  const section = document.createElement('fieldset');
+  section.className = 'resource-form-section';
+  section.innerHTML =
+    '<legend>Attachments</legend><div class="form-grid"><label class="field full">Reference files (optional)' +
+    `<input data-label="Attachments" name="attachments" type="file" multiple accept="${ACCEPT}"><small></small></label></div>`;
+  form.insertBefore(section, bottom);
+}
+
+/** Checks the chosen files (count, size); empty is always fine. */
+function checkFiles(form: HTMLFormElement): boolean {
+  for (const input of form.querySelectorAll<HTMLInputElement>('input[type="file"]')) {
+    const files = [...(input.files ?? [])];
+    const msg =
+      files.length > MAX_FILES ? `Please choose up to ${MAX_FILES} files.`
+      : files.some((f) => f.size > MAX_BYTES) ? 'Each file must be 10 MB or smaller.'
+      : '';
+    input.setCustomValidity(msg);
+  }
+  return form.reportValidity();
+}
+
 function updateCopy(form: HTMLFormElement, mode: Mode) {
   const note = form.querySelector('.form-bottom p');
   if (note) note.textContent = 'When you send this form, your details go securely to the Despina Pharma team. You will get a reference number straight away.';
   const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
   if (button) button.textContent = BUTTON_TEXT[mode];
   form.querySelectorAll<HTMLInputElement>('input[type="file"]').forEach((input) => {
-    input.accept = '.pdf,.jpg,.jpeg,.png,.docx,.xlsx';
+    input.accept = ACCEPT;
+    input.required = false;
+    input.addEventListener('change', () => input.setCustomValidity(''));
     const hint = input.parentElement?.querySelector('small');
-    if (hint) hint.textContent = 'Optional. PDF, JPG, PNG, DOCX or XLSX, up to 10 MB. The file is sent securely with your review.';
+    if (hint) hint.textContent = `Optional. PDF, JPG, PNG, DOCX or XLSX, up to 10 MB each${input.multiple ? `, max ${MAX_FILES} files` : ''}. Files are sent securely with your form.`;
   });
+}
+
+/**
+ * Asks before leaving the page once the visitor has typed something that was not sent yet
+ * (closing the tab, reloading, or following a link). Returns a cleanup function with `.saved()` for after a send.
+ */
+function warnBeforeLeaving(form: HTMLFormElement) {
+  let dirty = false;
+  const onInput = (e: Event) => { if (e.isTrusted) dirty = true; };
+  const onBeforeUnload = (e: BeforeUnloadEvent) => {
+    if (!dirty) return;
+    e.preventDefault();
+    e.returnValue = '';
+  };
+  const onClick = (e: MouseEvent) => {
+    if (!dirty || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    const a = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+    if (!a || a.target === '_blank' || a.hasAttribute('download') || !/^https?:$/.test(a.protocol)) return;
+    if (a.pathname === location.pathname && a.search === location.search) return; // same page (e.g. #anchor)
+    if (confirm('You have entries in this form that were not sent. Leave the page anyway?')) dirty = false;
+    else { e.preventDefault(); e.stopImmediatePropagation(); }
+  };
+  form.addEventListener('input', onInput);
+  form.addEventListener('change', onInput);
+  window.addEventListener('beforeunload', onBeforeUnload);
+  document.addEventListener('click', onClick, true);
+  const stop = () => {
+    form.removeEventListener('input', onInput);
+    form.removeEventListener('change', onInput);
+    window.removeEventListener('beforeunload', onBeforeUnload);
+    document.removeEventListener('click', onClick, true);
+  };
+  return Object.assign(stop, { saved: () => { dirty = false; } });
 }
 
 function idempotencyKey(): string {
@@ -240,10 +333,14 @@ export function FormConnector() {
     const mode = (form.dataset.mode as Mode) ?? 'contact';
     const params = new URLSearchParams(location.search);
     if (mode === 'contact') addInquiryType(form, params);
-    if (mode === 'sample_request') prefillSampleRequest(form, params);
+    if (mode === 'sample_request' || mode === 'product') prefillSampleRequest(form, params);
+    addAttachments(form);
+    const stopList = mode === 'product' ? addProjectList(form) : () => {};
     addConsentAndHoneypot(form);
     updateCopy(form, mode);
     const stopConsent = requireConsent(form);
+    const openedAt = Date.now();
+    const stopUnsaved = warnBeforeLeaving(form);
 
     const eyebrow = dialog.querySelector('.eyebrow');
     const title = dialog.querySelector('h2');
@@ -283,7 +380,7 @@ export function FormConnector() {
       // Run instead of the original "prepare locally" handler.
       e.preventDefault();
       e.stopImmediatePropagation();
-      if (sending || !form.reportValidity()) return;
+      if (sending || !checkFiles(form)) return;
       sending = true;
       const button = form.querySelector<HTMLButtonElement>('button[type="submit"]');
       const label = button?.textContent ?? '';
@@ -297,6 +394,11 @@ export function FormConnector() {
         const companyName = first(data.fields.company) || first(data.fields.brandName);
         const service = params.get('service') || first(data.fields.service);
         const items: Record<string, unknown>[] = mode === 'product' || mode === 'sample_request' ? await catalogItems(params) : [];
+        const listed = mode === 'product' ? readList() : [];
+        for (const l of listed) {
+          const catalogPath = l.path.replace(/^\/formulations\//, '').replace(/\/$/, '');
+          if (!items.some((i) => i.catalogPath === catalogPath)) items.push({ catalogPath });
+        }
         const slug = service ? await serviceSlug(service) : undefined;
         if (slug) items.push({ serviceSlug: slug });
         const uploads = [];
@@ -338,10 +440,13 @@ export function FormConnector() {
             policyVersion: POLICY_VERSION,
           },
           hp: (form.elements.namedItem('_hp') as HTMLInputElement).value || undefined,
+          elapsedMs: Date.now() - openedAt,
         });
         const sent = collect(form, mode, result.referenceNo);
         clearIdempotencyKey();
         form.reset();
+        stopUnsaved.saved();
+        if (listed.length) writeList([]);
         show({
           eyebrow: 'SENT',
           title: 'Thank you. We have your details.',
@@ -351,10 +456,12 @@ export function FormConnector() {
         });
       } catch (err) {
         const msg = err instanceof ApiError ? err.message : 'Check your connection and try again.';
+        const tracking = err instanceof ApiError && err.requestId && err.status >= 500
+          ? `<br><small>If this keeps happening, quote this code to Despina: ${escapeHtml(err.requestId)}</small>` : '';
         show({
           eyebrow: 'NOT SENT YET',
           title: 'We couldn’t send this.',
-          html: `${escapeHtml(msg)}<br>Your entries are still in the form, so you can try again — or download the brief and share it with your Despina contact.`,
+          html: `${escapeHtml(msg)}<br>Your entries are still in the form, so you can try again — or download the brief and share it with your Despina contact.${tracking}`,
           brief: data.brief,
         });
       } finally {
@@ -369,6 +476,8 @@ export function FormConnector() {
     return () => {
       document.removeEventListener('submit', onSubmit, true);
       stopConsent();
+      stopList();
+      stopUnsaved();
       download?.removeEventListener('click', onDownload);
     };
   }, []);

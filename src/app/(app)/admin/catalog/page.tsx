@@ -2,11 +2,14 @@
 
 import { Suspense, useState } from 'react';
 import type { FormEvent } from 'react';
-import { patch, post, qs } from '@/lib/api';
+import { api, patch, post, qs } from '@/lib/api';
 import { CATALOG_KINDS } from '@/lib/types';
 import type { CatalogCategory, CatalogItem, CatalogSource, Paged } from '@/lib/types';
 import { Badge, Empty, ErrorBox, Loading, Modal, PageHead, Pager, Tabs, formValues, humanize, useAction, useApi } from '@/components/app/ui';
 import { useQueryState } from '@/components/app/useQueryState';
+
+/** Edited product pages update on the website at once (otherwise within 5 minutes). */
+const refreshWebsite = () => fetch('/site-revalidate/', { method: 'POST', credentials: 'same-origin' }).catch(() => undefined);
 
 const slugify = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^\w\s-]/g, '').trim().replace(/[\s_-]+/g, '-');
 
@@ -22,7 +25,13 @@ function ItemForm({ item, categories, sources, onSaved }: { item?: CatalogItem; 
       ingredients: typeof v.ingredients === 'string' ? v.ingredients.split('\n').map((x) => x.trim()).filter(Boolean) : [],
     };
     const ok = await run(() => (item ? patch(`/admin/catalog/items/${item.id}`, body) : post('/admin/catalog/items', body)), item ? 'Item saved' : 'Item created');
-    if (ok) onSaved();
+    if (ok) { void refreshWebsite(); onSaved(); }
+  }
+  const [image, setImage] = useState(item?.imageUrl ?? '');
+  async function uploadImage(file: File | undefined) {
+    if (!item || !file) return;
+    const saved = await run(() => api<CatalogItem>(`/admin/catalog/items/${item.id}/image`, { method: 'PUT', raw: file, headers: { 'Content-Type': file.type } }), 'Image uploaded');
+    if (saved) { setImage(saved.imageUrl ?? ''); void refreshWebsite(); }
   }
   return (
     <form className="form-grid" onSubmit={submit}>
@@ -37,8 +46,17 @@ function ItemForm({ item, categories, sources, onSaved }: { item?: CatalogItem; 
         <select name="sourceId" defaultValue={item?.sourceId ?? ''}><option value="">None (Despina)</option>{sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
       <label className="field full"><span>Subgroup</span><input name="subgroup" defaultValue={item?.subgroup ?? ''} /></label>
       <label className="field full"><span>Ingredients (one per line)</span><textarea name="ingredients" rows={5} defaultValue={item?.ingredients?.join('\n') ?? ''} /></label>
-      <label className="field full"><span>Notes</span><textarea name="notes" defaultValue={item?.notes ?? ''} /></label>
-      <label className="field"><span>Image URL</span><input name="imageUrl" defaultValue={item?.imageUrl ?? ''} /></label>
+      <label className="field full"><span>Description on the product page</span><textarea name="notes" maxLength={2000} defaultValue={item?.notes ?? ''} />
+        <small className="hint">Leave empty to keep the original text of the page.</small></label>
+      <div className="field full"><span>Product image</span>
+        {/* eslint-disable-next-line @next/next/no-img-element -- small admin preview of an API-served image */}
+        {image && <img src={image} alt="" style={{ width: 120, height: 120, objectFit: 'cover', borderRadius: 8, border: '1px solid var(--line-2)' }} />}
+        {item ? <input type="file" accept="image/png,image/jpeg,image/webp" disabled={busy} onChange={(e) => void uploadImage(e.target.files?.[0])} aria-label="Upload product image" />
+          : <small className="hint">Save the item first, then upload an image.</small>}
+        <small className="hint">PNG, JPEG or WebP, up to 5 MB. Replaces the illustrative category artwork on the product page.</small>
+        <input type="hidden" name="imageUrl" value={image} />
+        {image && <button type="button" className="btn small ghost" onClick={() => setImage('')}>Remove image (then Save)</button>}
+      </div>
       <label className="field"><span>SEO title</span><input name="seoTitle" maxLength={200} defaultValue={item?.seoTitle ?? ''} /></label>
       <label className="field full"><span>SEO description</span><textarea name="seoDescription" maxLength={400} rows={2} defaultValue={item?.seoDescription ?? ''} /></label>
       <label className="check full"><input type="checkbox" name="isPublished" defaultChecked={item?.isPublished ?? true} /> Published on the website</label>

@@ -56,10 +56,25 @@ export default function InquiryPage({ params }: { params: Promise<{ id: string }
         {me?.role === 'admin' && <Link className="btn secondary" href={`/admin/audit/?inquiryId=${d.id}`}>Audit history</Link>}
         {d.project ? (
           <Link className="btn accent" href={`/admin/projects/${d.project.id}/`}>Project {d.project.code}</Link>
-        ) : canConvert && (
+        ) : canConvert && !d.heldAt && (
           <button className="btn accent" onClick={() => { setProjectName(''); setConvertOpen(true); }}>Convert to project</button>
         )}
       </PageHead>
+
+      {d.heldAt && (
+        <div className="alert warn" style={{ marginBottom: 16 }}>
+          <strong>Held as possible spam.</strong> Nobody was e-mailed and no follow-up task was made.
+          {!!d.holdReasons?.length && <ul style={{ margin: '6px 0 0 18px' }}>{d.holdReasons.map((r) => <li key={r}>{r}</li>)}</ul>}
+          {canConvert && (
+            <div className="row" style={{ marginTop: 10 }}>
+              <button className="btn" disabled={busy} onClick={async () => { if (await run(() => post(`/inquiries/${id}/release`), 'Released – e-mails sent and follow-up task created')) inq.reload(); }}>Not spam – release it</button>
+              <button className="btn danger" disabled={busy} onClick={async () => {
+                if (confirm(`Delete ${d.referenceNo} as spam? The form and its files are removed for good.`) && await run(() => del(`/inquiries/${id}/spam`), 'Spam deleted')) router.push('/admin/inquiries/?view=held');
+              }}>Delete as spam</button>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="split">
         <div className="stack">
@@ -143,11 +158,12 @@ export default function InquiryPage({ params }: { params: Promise<{ id: string }
             <h3>Emails</h3>
             {d.emails.map((e) => (
               <div key={e.id} className="row between small" style={{ padding: '6px 0', borderBottom: '1px solid var(--line-2)' }}>
-                <span>{humanize(e.kind)}<div className="muted">{e.toEmail}</div></span>
+                <span>{humanize(e.kind)}<div className="muted">{e.toEmail}</div>{e.requestId && <div className="muted mono" title="Tracking ID">{e.requestId}</div>}</span>
                 <Badge value={e.status} />
               </div>
             ))}
             {!d.emails.length && <p className="muted small">No emails.</p>}
+            {d.requestId && <p className="muted small" style={{ marginTop: 10 }}>Tracking ID of the form: <span className="mono">{d.requestId}</span></p>}
           </div>
         </div>
       </div>

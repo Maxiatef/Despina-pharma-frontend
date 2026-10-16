@@ -89,7 +89,13 @@ export default function CompanyPage({ params }: { params: Promise<{ id: string }
             <div className="row between"><h3>Workspace access</h3><button className="btn small" onClick={() => { setInviteLink(null); setInvite(true); }}>Invite customer</button></div>
             {d.members.map((m) => (
               <div key={m.id} className="row between small" style={{ padding: '6px 0', borderBottom: '1px solid var(--line-2)' }}>
-                <span>{m.user?.email}<div className="muted">{humanize(m.memberRole)}</div></span>
+                <span>{m.user?.email}<div className="muted">{m.memberRole === 'owner' ? 'Main contact – can invite colleagues' : humanize(m.memberRole)}</div></span>
+                {m.user && (
+                  <select className="input small" style={{ width: 'auto' }} value={m.memberRole} disabled={busy} aria-label="Access"
+                    onChange={async (e) => { if (await run(() => post(`/companies/${id}/members`, { userId: m.user!.id, memberRole: e.target.value }), 'Access changed')) c.reload(); }}>
+                    <option value="member">Member</option><option value="owner">Main contact</option><option value="viewer">Viewer</option>
+                  </select>
+                )}
                 {m.user && <button className="btn small ghost" disabled={busy} onClick={async () => { if (await run(() => del(`/companies/${id}/members/${m.user!.id}`), 'Access removed')) c.reload(); }}>Remove</button>}
               </div>
             ))}
@@ -111,7 +117,7 @@ export default function CompanyPage({ params }: { params: Promise<{ id: string }
                 <option value="">—</option>{d.contacts.map((x) => <option key={x.id} value={x.id}>{x.firstName} {x.lastName ?? ''} · {x.email}</option>)}
               </select></label>
             <label className="field"><span>Email</span><input name="email" type="email" required /></label>
-            <label className="field"><span>Access</span><select name="memberRole"><option value="member">Member</option><option value="owner">Owner</option><option value="viewer">Viewer</option></select></label>
+            <label className="field"><span>Access</span><select name="memberRole"><option value="member">Member</option><option value="owner">Main contact (can invite colleagues)</option><option value="viewer">Viewer</option></select></label>
             <button className="btn" disabled={busy}>Create invitation</button>
           </form>
         )}
