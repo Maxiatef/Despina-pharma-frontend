@@ -11,6 +11,7 @@ import type {
 import type { Feedback, FeedbackDetails, QuoteTerms } from '@/lib/types';
 import { isStaff, useAuth } from './auth';
 import { DocumentsPanel, MessagesPanel, TasksPanel } from './panels';
+import { ScrollToSection } from './ui';
 import { Badge, Empty, ErrorBox, Kv, Loading, Modal, PageHead, approvalsChanged, fmtDate, fmtMoney, humanize, useAction, useApi, useApprovalsChanged, Tip } from './ui';
 
 // ===================================================================== stages
@@ -815,14 +816,15 @@ export function ProjectWorkspace({ id, backHref }: { id: string; backHref: strin
         {staff && project.sourceInquiryId && <Link className="btn secondary" href={`/admin/inquiries/${project.sourceInquiryId}/`}>Original inquiry</Link>}
         {me?.role === 'admin' && <Link className="btn secondary" href={`/admin/audit/?projectId=${project.id}`}>Audit history</Link>}
       </PageHead>
+      <ScrollToSection />
 
-      <Stages project={project} reload={p.reload} staff={staff} />
+      <div id="stages" className="anchor"><Stages project={project} reload={p.reload} staff={staff} /></div>
       <div className="split" style={{ marginTop: 16 }}>
         <div className="stack">
-          <Products project={project} staff={staff} reload={p.reload} />
-          <Quotes project={project} staff={staff} reload={p.reload} />
-          <DocumentsPanel path={`/projects/${id}/documents`} projectId={id} />
-          <MessagesPanel path={`/projects/${id}/messages`} title={staff ? 'Messages with the customer' : 'Messages with Despina'} />
+          <div id="products" className="anchor"><Products project={project} staff={staff} reload={p.reload} /></div>
+          <div id="quotes" className="anchor"><Quotes project={project} staff={staff} reload={p.reload} /></div>
+          <div id="documents" className="anchor"><DocumentsPanel path={`/projects/${id}/documents`} projectId={id} /></div>
+          <div id="messages" className="anchor"><MessagesPanel path={`/projects/${id}/messages`} title={staff ? 'Messages with the customer' : 'Messages with Despina'} /></div>
         </div>
         <div className="stack">
           {staff && (
@@ -844,8 +846,8 @@ export function ProjectWorkspace({ id, backHref }: { id: string; backHref: strin
                 done={project.status === 'completed' || project.status === 'cancelled'} reload={p.reload} />
             </div>
           </div>
-          <Approvals projectId={id} />
-          {staff && <TasksPanel projectId={id} />}
+          <div id="approvals" className="anchor"><Approvals projectId={id} /></div>
+          {staff && <div id="tasks" className="anchor"><TasksPanel projectId={id} /></div>}
           <ProjectTimeline key={historyKey} projectId={id} />
         </div>
       </div>

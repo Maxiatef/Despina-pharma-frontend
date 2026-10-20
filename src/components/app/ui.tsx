@@ -266,3 +266,34 @@ export function Kv({ rows }: { rows: [ReactNode, ReactNode][] }) {
     </dl>
   );
 }
+
+/**
+ * Scrolls to the section named in the address (#messages, #documents…) once it has loaded, and briefly highlights it.
+ * Used by the notification bell; also re-runs when a notification for the page already open is clicked.
+ */
+export function ScrollToSection() {
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | undefined;
+    const go = () => {
+      clearInterval(timer);
+      const id = decodeURIComponent(window.location.hash.slice(1));
+      if (!id) return;
+      let tries = 0;
+      // Sections fill in after their data loads, so wait for the element (up to ~4 s) before scrolling.
+      timer = setInterval(() => {
+        const el = document.getElementById(id);
+        if (el && el.offsetHeight > 40) {
+          clearInterval(timer);
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          el.classList.add('flash');
+          setTimeout(() => el.classList.remove('flash'), 2000);
+        } else if (++tries > 40) clearInterval(timer);
+      }, 100);
+    };
+    go();
+    window.addEventListener('hashchange', go);
+    window.addEventListener('app:scroll-section', go);
+    return () => { clearInterval(timer); window.removeEventListener('hashchange', go); window.removeEventListener('app:scroll-section', go); };
+  }, []);
+  return null;
+}

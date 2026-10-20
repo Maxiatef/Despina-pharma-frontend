@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { del, patch, post } from '@/lib/api';
 import type { Company, Contact, ProjectRow, UserRole } from '@/lib/types';
 import { useAuth } from '@/components/app/auth';
-import { Badge, ErrorBox, Loading, Modal, PageHead, fmtDate, formValues, humanize, useAction, useApi } from '@/components/app/ui';
+import { Badge, ErrorBox, Loading, Modal, PageHead, fmtDate, formValues, humanize, useAction, useApi, useToast } from '@/components/app/ui';
 
 interface CompanyDetail extends Company {
   contacts: Contact[];
@@ -22,6 +22,7 @@ export default function CompanyPage({ params }: { params: Promise<{ id: string }
   const { me } = useAuth();
   const c = useApi<CompanyDetail>(`/companies/${id}`);
   const { busy, run } = useAction();
+  const toast = useToast();
   const [invite, setInvite] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviteMail, setInviteMail] = useState<{ status?: string; error?: string | null } | null>(null);
@@ -38,8 +39,10 @@ export default function CompanyPage({ params }: { params: Promise<{ id: string }
   async function sendInvite(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const v = formValues(e.currentTarget);
-    const r = await run(() => post<{ inviteToken: string; emailStatus?: string; emailError?: string | null }>('/users/invite', { email: v.email, role: 'customer', companyId: id, contactId: v.contactId || undefined, memberRole: v.memberRole }), 'Invitation created');
-    if (r) { setInviteLink(`${window.location.origin}/accept-invite/?token=${r.inviteToken}`); setInviteMail({ status: r.emailStatus, error: r.emailError }); c.reload(); }
+    const r = await run(() => post<{ inviteToken: string | null; addedExisting?: boolean; emailStatus?: string; emailError?: string | null }>('/users/invite', { email: v.email, role: 'customer', companyId: id, contactId: v.contactId || undefined, memberRole: v.memberRole }));
+    // This person already has a login: they were just given access, no invitation needed.
+    if (r?.addedExisting) { toast(`${v.email} already has an account – they can now see this company’s projects`); setInvite(false); c.reload(); return; }
+    if (r) { toast('Invitation created'); setInviteLink(`${window.location.origin}/accept-invite/?token=${r.inviteToken ?? ''}`); setInviteMail({ status: r.emailStatus, error: r.emailError }); c.reload(); }
   }
 
   return (

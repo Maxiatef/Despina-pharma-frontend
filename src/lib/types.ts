@@ -85,6 +85,10 @@ export interface Task extends Base {
 export interface DocumentVersion extends Base {
   documentId: string; versionNo: number; originalFilename: string; mimeType: string; sizeBytes: string; sha256: string;
   scanStatus: 'pending' | 'clean' | 'infected' | 'failed'; uploadedBy: string | null;
+  /** Set on document lists: true when a Despina team member uploaded this version. */
+  uploadedByStaff?: boolean;
+  /** Set on document lists: when the customer approved this version, if they did. */
+  approvedAt?: string | null;
 }
 export interface Doc extends Base {
   inquiryId: string | null; projectId: string | null; companyId: string | null; uploadedBy: string | null; title: string;

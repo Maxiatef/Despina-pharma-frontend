@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { RequireAuth, useAuth } from './auth';
-import { useApi, humanize } from './ui';
+import { useApi, humanize, fmtDate } from './ui';
+import { get, post } from '@/lib/api';
 import { STAFF_ROLES } from '@/lib/types';
 import type { UserRole } from '@/lib/types';
 
@@ -61,9 +62,60 @@ const PORTAL_NAV: NavGroup[] = [
   { group: 'You', items: [{ href: '/portal/account/', label: 'My account' }, { href: '/', label: 'Despina website' }] },
 ];
 
+type Notice = { id: string; title: string; link: string | null; readAt: string | null; createdAt: string };
+
+type Notices = { items: Notice[]; unread: number; unreadProjects: number };
+
+/** Loads the signed-in person's notifications and checks again every minute. */
+function useNotices(enabled: boolean) {
+  const [data, setData] = useState<Notices | null>(null);
+  const load = useCallback(() => { get<Notices>('/notifications').then(setData).catch(() => {}); }, []);
+  useEffect(() => {
+    if (!enabled) return;
+    load();
+    const t = setInterval(load, 60_000);
+    return () => clearInterval(t);
+  }, [enabled, load]);
+  return { data, setData, load };
+}
+
+/** The bell: new messages, documents, quotes, approvals… – the same events that are e-mailed. */
+function Bell({ notices, onNavigate }: { notices: ReturnType<typeof useNotices>; onNavigate: () => void }) {
+  const { data, setData, load } = notices;
+  const [open, setOpen] = useState(false);
+  async function toggle() {
+    const next = !open;
+    setOpen(next);
+    // Opening the list counts as reading it; the new ones stay highlighted until it is closed.
+    if (next && data?.unread) { await post('/notifications/read', {}).catch(() => {}); setData({ ...data, unread: 0, unreadProjects: 0 }); }
+    if (!next) load();
+  }
+  return (
+    <div className="bell">
+      <button className="bell-btn" onClick={toggle} aria-expanded={open}>
+        <span>🔔 Notifications</span>
+        {!!data?.unread && <span className="count">{data.unread}</span>}
+      </button>
+      {open && (
+        <div className="bell-list">
+          {!data?.items.length && <p className="muted small">Nothing yet. New messages, files and quotes will show here.</p>}
+          {data?.items.map((n) => (
+            <Link key={n.id} href={n.link ?? '#'} className={n.readAt ? '' : 'unread'} onClick={() => { setOpen(false); onNavigate(); load(); setTimeout(() => window.dispatchEvent(new Event('app:scroll-section')), 300); }}>
+              <span>{n.title}</span>
+              <small>{fmtDate(n.createdAt, true)}</small>
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Side({ nav, open, onNavigate }: { nav: NavGroup[]; open: boolean; onNavigate: () => void }) {
   const pathname = usePathname();
   const { me, logout } = useAuth();
+  const notices = useNotices(!!me && !me.mfaPending);
+  const projectsUnread = notices.data?.unreadProjects;
   const isActive = (href: string) => (href === '/admin/' || href === '/portal/' ? pathname === href : pathname.startsWith(href));
   return (
     <aside className={`side ${open ? 'open' : ''}`}>
@@ -73,6 +125,7 @@ function Side({ nav, open, onNavigate }: { nav: NavGroup[]; open: boolean; onNav
         <img src="/assets/logo.svg" alt="" />
         <span>Despina<small>{me?.role === 'customer' ? 'WORKSPACE' : 'TEAM'}</small></span>
       </a>
+      {me && !me.mfaPending && <Bell notices={notices} onNavigate={onNavigate} />}
       <nav aria-label="Workspace">
         {nav.map((g) => {
           const items = g.items.filter((i) => !i.roles || (me && i.roles.includes(me.role)));
@@ -83,7 +136,10 @@ function Side({ nav, open, onNavigate }: { nav: NavGroup[]; open: boolean; onNav
               {items.map((i) => (
                 <Link key={i.href} href={i.href} className={isActive(i.href) ? 'active' : ''} onClick={onNavigate}>
                   {i.label}
-                  {!!i.count && <span className="count">{i.count}</span>}
+                  {/* New notifications about projects show on the Projects item too. */}
+                  {!!(i.count ?? (i.href.endsWith('/projects/') ? projectsUnread : 0)) && (
+                    <span className="count">{i.count ?? projectsUnread}</span>
+                  )}
                 </Link>
               ))}
             </div>

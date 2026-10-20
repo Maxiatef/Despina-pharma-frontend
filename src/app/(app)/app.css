@@ -60,6 +60,14 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .side nav a:hover { background: rgba(255, 255, 255, .07); text-decoration: none; }
 .side nav a.active { background: rgba(14, 196, 223, .16); color: #fff; }
 .side .count { background: var(--cyan); color: var(--navy); border-radius: 99px; font-size: .7rem; font-weight: 600; padding: 0 7px; }
+.side .bell-btn { width: 100%; display: flex; align-items: center; justify-content: space-between; background: rgba(255, 255, 255, .06); border: 0; border-radius: 7px; color: #fff; padding: 9px 10px; font: inherit; font-size: .9rem; cursor: pointer; }
+.side .bell-btn:hover { background: rgba(255, 255, 255, .1); }
+.side .bell-list { margin-top: 6px; display: flex; flex-direction: column; gap: 2px; max-height: 50vh; overflow-y: auto; }
+.side .bell-list p { padding: 6px 10px; color: #a9bfcf; }
+.side .bell-list a { display: block; padding: 8px 10px; border-radius: 7px; color: #d6e4ee; font-size: .82rem; line-height: 1.35; }
+.side .bell-list a:hover { background: rgba(255, 255, 255, .07); text-decoration: none; }
+.side .bell-list a.unread { background: rgba(14, 196, 223, .14); color: #fff; }
+.side .bell-list small { display: block; color: #7f9db3; margin-top: 2px; }
 .side .who { margin-top: auto; border-top: 1px solid rgba(255, 255, 255, .1); padding: 14px 8px 0; font-size: .82rem; }
 .side .who b { display: block; color: #fff; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
 .side .who button { background: none; border: 0; color: var(--cyan); padding: 0; cursor: pointer; margin-top: 6px; }
@@ -238,3 +246,7 @@ dialog.modal::backdrop { background: rgba(17, 42, 70, .45); }
 .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid var(--line); border-top-color: var(--cyan); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading { padding: 40px; display: flex; justify-content: center; }
+
+/* Sections a notification can open at (#messages, #documents…): leave room above, and flash once on arrival. */
+.anchor { scroll-margin-top: 16px; border-radius: 14px; transition: box-shadow .4s; }
+.anchor.flash { box-shadow: 0 0 0 3px var(--cyan); }

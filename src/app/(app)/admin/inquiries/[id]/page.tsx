@@ -8,6 +8,7 @@ import { INQUIRY_STATUSES, INQUIRY_TYPES } from '@/lib/types';
 import type { InquiryDetail, ProjectDetail, StageTemplate } from '@/lib/types';
 import { Badge, ErrorBox, Kv, Loading, Modal, PageHead, fmtDate, humanize, useAction, useApi } from '@/components/app/ui';
 import { DocumentsPanel, MessagesPanel, TasksPanel, Timeline } from '@/components/app/panels';
+import { ScrollToSection } from '@/components/app/ui';
 import { useAuth } from '@/components/app/auth';
 
 export default function InquiryPage({ params }: { params: Promise<{ id: string }> }) {
@@ -107,13 +108,14 @@ export default function InquiryPage({ params }: { params: Promise<{ id: string }
               </div>
             </div>
           </div>
-          <DocumentsPanel path={`/inquiries/${id}/documents`} canUpload={false} />
+          <ScrollToSection />
+          <div id="documents" className="anchor"><DocumentsPanel path={`/inquiries/${id}/documents`} canUpload={false} /></div>
           {d.contact.emailStatus && (
             <div className="alert error">
               This address {d.contact.emailStatus} earlier, so e-mails to it are not sent. Check it on the <Link href={`/admin/contacts/${d.contact.id}/`}>contact</Link> and clear the status there.
             </div>
           )}
-          <MessagesPanel path={`/inquiries/${id}/messages`} title="Reply to the customer" hint={`E-mailed to ${d.contact.email}`} allowAskInfo onSent={inq.reload} />
+          <div id="messages" className="anchor"><MessagesPanel path={`/inquiries/${id}/messages`} title="Reply to the customer" hint={`E-mailed to ${d.contact.email}`} allowAskInfo onSent={inq.reload} /></div>
           <div className="card">
             <div className="card-head"><h2>Activity</h2></div>
             <div className="card-body">
@@ -159,7 +161,7 @@ export default function InquiryPage({ params }: { params: Promise<{ id: string }
               {d.consents.map((c) => <Badge key={c.id} value={`${c.consentType}: ${c.granted ? 'yes' : 'no'}`} tone={c.granted ? 'ok' : ''} />)}
             </div>
           </div>
-          <TasksPanel inquiryId={id} />
+          <div id="tasks" className="anchor"><TasksPanel inquiryId={id} /></div>
           <div className="card pad">
             <h3>Emails</h3>
             {d.emails.map((e) => (

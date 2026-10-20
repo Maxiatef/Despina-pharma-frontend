@@ -24,6 +24,14 @@ export function DocumentsPanel({ path, projectId, canUpload = true }: { path: st
     if (r) window.location.href = r.url;
   }
 
+  // Opens images and PDFs in a new tab. The tab is opened before the request so pop-up blockers allow it.
+  async function view(versionId: string) {
+    const tab = window.open('', '_blank');
+    const r = await run(() => post<{ url: string }>(`/document-versions/${versionId}/download-link`));
+    if (r && tab) tab.location.href = `${r.url}${r.url.includes('?') ? '&' : '?'}inline=1`;
+    else tab?.close();
+  }
+
   async function upload(file: File, documentId?: string) {
     const ok = await run(() => uploadFile(file, { projectId: documentId ? undefined : projectId, documentId, visibility: staff ? visibility : undefined }), 'File uploaded');
     if (ok) docs.reload();
@@ -65,11 +73,15 @@ export function DocumentsPanel({ path, projectId, canUpload = true }: { path: st
                     <td className="muted small">{fmtDate(d.createdAt)}</td>
                     <td style={{ textAlign: 'right' }}>
                       <div className="row" style={{ justifyContent: 'flex-end' }}>
+                        {v?.scanStatus === 'clean' && /\.(png|jpe?g|gif|webp|pdf)$/i.test(v.originalFilename) && (
+                          <button className="btn small secondary" disabled={busy} onClick={() => view(v.id)}>View</button>
+                        )}
                         {v?.scanStatus === 'clean' && <button className="btn small secondary" disabled={busy} onClick={() => download(v.id)}>Download</button>}
-                        {!staff && projectId && v?.scanStatus === 'clean' && (
+                        {!staff && projectId && v?.scanStatus === 'clean' && v.uploadedByStaff && !v.approvedAt && (
                           <button className="btn small accent" disabled={busy} onClick={() => { setApproving(v.id); setApproveText(`I approve ${d.title} version ${v.versionNo}`); }}>Approve</button>
                         )}
-                        {staff && projectId && d.visibility === 'customer' && v?.scanStatus === 'clean' && (
+                        {v?.approvedAt && <span title={`Approved ${fmtDate(v.approvedAt)}`}><Badge value="approved" /></span>}
+                        {staff && projectId && d.visibility === 'customer' && v?.scanStatus === 'clean' && v.uploadedByStaff && !v.approvedAt && (
                           <button className="btn small secondary" disabled={busy} title="E-mail the customer: please review and approve this version"
                             onClick={() => run(() => post(`/documents/${d.id}/request-approval`, {}), `Approval requested for “${d.title}” v${v.versionNo}`)}>Request approval</button>
                         )}
