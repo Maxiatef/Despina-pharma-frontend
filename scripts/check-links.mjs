@@ -69,8 +69,11 @@ await pool([...targets.keys()], 12, async (url) => {
 // 4) basics
 const nf = await fetch(BASE + '/no-such-page-xyz/');
 if (nf.status !== 404) problems.push(`missing page returns ${nf.status}, expected 404`);
-const health = await fetch(BASE + '/api/health');
-if (health.status !== 200) problems.push(`/api/health through the site: HTTP ${health.status}`);
+// SKIP_API=1 (CI without a backend) skips the API check.
+if (!process.env.SKIP_API) {
+  const health = await fetch(BASE + '/api/health');
+  if (health.status !== 200) problems.push(`/api/health through the site: HTTP ${health.status}`);
+}
 const home = await fetch(BASE + '/');
 const h = Object.fromEntries(home.headers);
 const info = [];

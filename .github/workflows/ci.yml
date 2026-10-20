@@ -1,0 +1,35 @@
+# Checks every push and pull request: lint, types, build, then the site checks against the built site.
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm run build
+      - name: Start the built site
+        run: |
+          npx next start -p 3000 &
+          for i in $(seq 1 60); do curl -sf -o /dev/null http://localhost:3000/ && exit 0; sleep 1; done
+          echo "site did not start"; exit 1
+      - name: Route aliases (static + live redirects)
+        run: npm run check-routes
+        env:
+          SITE_URL: http://localhost:3000
+      - name: Links, images, scripts and 404 on every page
+        run: npm run check-links
+        env:
+          SITE_URL: http://localhost:3000
+          SKIP_API: '1'

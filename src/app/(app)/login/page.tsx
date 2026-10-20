@@ -82,6 +82,12 @@ function LoginForm() {
           {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- website page: separate root layout, full load intended */}
           <a href="/">Back to the website</a>
         </div>
+        {!needCode && (
+          <p className="small muted">
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- website page: separate root layout, full load intended */}
+            No account yet? Client accounts are created by our team when your project starts. <a href="/contact/">Contact us</a> to get started.
+          </p>
+        )}
       </form>
     </AuthLayout>
   );
