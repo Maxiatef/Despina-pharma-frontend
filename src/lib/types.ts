@@ -89,6 +89,8 @@ export interface DocumentVersion extends Base {
   uploadedByStaff?: boolean;
   /** Set on document lists: when the customer approved this version, if they did. */
   approvedAt?: string | null;
+  /** Last time staff asked the customer to approve this version. */
+  approvalRequestedAt?: string | null;
 }
 export interface Doc extends Base {
   inquiryId: string | null; projectId: string | null; companyId: string | null; uploadedBy: string | null; title: string;

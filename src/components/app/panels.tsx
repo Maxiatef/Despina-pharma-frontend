@@ -67,6 +67,11 @@ export function DocumentsPanel({ path, projectId, canUpload = true }: { path: st
                     <td>
                       <b style={{ fontWeight: 500 }}>{d.title}</b>
                       <div className="muted small">{v ? `${v.originalFilename} · ${fmtBytes(v.sizeBytes)} · v${v.versionNo}` : 'Upload not finished'}</div>
+                      {v?.approvalRequestedAt && !v.approvedAt && (
+                        <div className="small" style={{ color: 'var(--teal)', marginTop: 2 }}>
+                          {staff ? 'Approval requested' : 'Despina asked you to approve this'} · last sent {fmtDate(v.approvalRequestedAt, true)}
+                        </div>
+                      )}
                     </td>
                     <td>{staff && <Badge value={d.visibility} />}</td>
                     <td>{v && <Badge value={v.scanStatus} />}</td>
@@ -83,7 +88,7 @@ export function DocumentsPanel({ path, projectId, canUpload = true }: { path: st
                         {v?.approvedAt && <span title={`Approved ${fmtDate(v.approvedAt)}`}><Badge value="approved" /></span>}
                         {staff && projectId && d.visibility === 'customer' && v?.scanStatus === 'clean' && v.uploadedByStaff && !v.approvedAt && (
                           <button className="btn small secondary" disabled={busy} title="E-mail the customer: please review and approve this version"
-                            onClick={() => run(() => post(`/documents/${d.id}/request-approval`, {}), `Approval requested for “${d.title}” v${v.versionNo}`)}>Request approval</button>
+                            onClick={async () => { if (await run(() => post(`/documents/${d.id}/request-approval`, {}), `Approval requested for “${d.title}” v${v.versionNo}`)) docs.reload(); }}>Request approval</button>
                         )}
                         {staff && v?.scanStatus === 'pending' && (
                           <>
