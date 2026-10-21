@@ -284,9 +284,20 @@ export function ScrollToSection() {
         const el = document.getElementById(id);
         if (el && el.offsetHeight > 40) {
           clearInterval(timer);
-          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          el.scrollIntoView({ block: 'start' });
           el.classList.add('flash');
           setTimeout(() => el.classList.remove('flash'), 2000);
+          // Sections above it can still be loading and push it down: keep it in place for a moment,
+          // unless the person scrolls themselves.
+          let checks = 0;
+          let stop = false;
+          const cancel = () => { stop = true; };
+          window.addEventListener('wheel', cancel, { once: true });
+          window.addEventListener('touchmove', cancel, { once: true });
+          timer = setInterval(() => {
+            if (stop || ++checks > 25) { clearInterval(timer); return; }
+            if (Math.abs(el.getBoundingClientRect().top - 16) > 30) el.scrollIntoView({ block: 'start' });
+          }, 120);
         } else if (++tries > 40) clearInterval(timer);
       }, 100);
     };
