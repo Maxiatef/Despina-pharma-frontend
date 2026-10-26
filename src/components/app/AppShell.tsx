@@ -173,11 +173,33 @@ function Frame({ nav, children }: { nav: NavGroup[]; children: ReactNode }) {
 
 const MFA_PENDING_NAV: NavGroup[] = [{ group: 'You', items: [{ href: '/admin/account/', label: 'My account' }] }];
 
+/** The role needed for a page, from the menu (e.g. /admin/users/ → admin). Undefined = any staff. */
+function rolesFor(pathname: string): UserRole[] | undefined {
+  const item = staffNav().flatMap((g) => g.items).filter((i) => i.roles && pathname.startsWith(i.href))
+    .sort((a, b) => b.href.length - a.href.length)[0];
+  return item?.roles;
+}
+
+/** Shown instead of a page the person's role cannot use (typed or bookmarked address). */
+function NoAccess() {
+  return (
+    <div className="card pad" style={{ maxWidth: 560 }}>
+      <span className="eyebrow">No access</span>
+      <h2 style={{ marginTop: 8 }}>This page isn’t part of your role.</h2>
+      <p className="sub">Ask an admin if you need it. Everything you can use is in the menu on the left.</p>
+      <p style={{ marginTop: 16 }}><Link className="btn secondary" href="/admin/">Back to the dashboard</Link></p>
+    </div>
+  );
+}
+
 function StaffFrame({ children }: { children: ReactNode }) {
   const { me } = useAuth();
+  const pathname = usePathname();
+  const needed = rolesFor(pathname);
+  const allowed = !needed || (me && needed.includes(me.role));
   // One tree in both cases, so the page (e.g. the new backup codes) stays when two-factor login turns on.
   const summary = useApi<{ new: number }>(me?.mfaPending ? null : '/inquiries/summary');
-  return <Frame nav={me?.mfaPending ? MFA_PENDING_NAV : staffNav(summary.data?.new)}>{children}</Frame>;
+  return <Frame nav={me?.mfaPending ? MFA_PENDING_NAV : staffNav(summary.data?.new)}>{allowed ? children : <NoAccess />}</Frame>;
 }
 
 /** Staff dashboard frame (/admin/*). */

@@ -127,7 +127,9 @@ export function Badge({ value, tone }: { value: string | null | undefined; tone?
   return <span className={`badge ${tone ?? TONE[value] ?? ''}`}>{humanize(value)}</span>;
 }
 
-export const humanize = (s: string) => s.replace(/[_-]/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+/** Words stored in code form shown as they are spoken (e.g. role "rnd" → "R&D"). */
+const LABELS: Record<string, string> = { rnd: 'R&D' };
+export const humanize = (s: string) => LABELS[s] ?? s.replace(/[_-]/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 
 export function fmtDate(d: string | Date | null | undefined, withTime = false) {
   if (!d) return '—';
